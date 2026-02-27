@@ -34,78 +34,29 @@ const ALL_SECTIONS = [
 ];
 
 function TemplateThumbnail({ template }: { template: Template }) {
-  const { design } = template;
-  const isTwoCol = design.layout.columns === 'two' || design.layout.columns === 'mix';
-  const hasBanner = design.personalDetails?.banner === true;
-  const accentColor = design.colors.accent;
+  const isCreative = (template as any).persona === 'creative';
+  const previewData = {
+    ...(isCreative ? jaganrajResume : atsOptimizedResume),
+    design: template.design
+  };
 
   return (
     <div
-      className="w-full aspect-[210/297] max-h-[240px] bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm flex flex-col transition-all group-hover:shadow-md"
-      style={{ fontFamily: design.typography.fontFamily }}
+      className="w-full aspect-[210/297] bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm flex flex-col transition-all group-hover:shadow-md pointer-events-none select-none relative"
     >
-      {hasBanner ? (
-        <div
-          className="p-3 mb-2 flex flex-col gap-1.5 min-h-[60px]"
-          style={{ backgroundColor: accentColor, color: '#fff' }}
-        >
-          <div className="h-2 w-16 bg-white/40 rounded-full" />
-          <div className="h-1 w-24 bg-white/20 rounded-full" />
-          <div className="mt-2 flex gap-1">
-            <div className="h-1 w-8 bg-white/20 rounded-full" />
-            <div className="h-1 w-8 bg-white/20 rounded-full" />
-          </div>
-        </div>
-      ) : (
-        <>
-          <div
-            className="h-1 shrink-0"
-            style={{ backgroundColor: accentColor }}
+      <div className="absolute inset-0">
+        <div className="origin-top-left" style={{
+          width: '794px',
+          height: '1123px',
+          transform: 'scale(0.3)', // Adjust scale for gallery width
+        }}>
+          <ResumePreview
+            data={previewData}
+            selectedSections={isCreative ? ALL_SECTIONS : ['personalInfo', 'summary', 'experience', 'education', 'skills']}
+            isSaved={true}
+            showControls={false}
           />
-          <div className="p-4 pb-2 border-b" style={{ borderColor: `${accentColor}20` }}>
-            <div className="h-2 w-20 rounded-full mb-1.5" style={{ backgroundColor: design.colors.text }} />
-            <div className="h-1 w-24 rounded-full" style={{ backgroundColor: accentColor, opacity: 0.6 }} />
-            <div className="mt-3 flex gap-2">
-              <div className="h-1 w-10 bg-slate-100 rounded-full" />
-              <div className="h-1 w-10 bg-slate-100 rounded-full" />
-            </div>
-          </div>
-        </>
-      )}
-
-      <div className="flex-1 p-4 flex gap-3 min-h-0">
-        {isTwoCol ? (
-          <>
-            <div
-              className="w-1/3 rounded-sm p-2 flex flex-col gap-2"
-              style={{ backgroundColor: `${accentColor}${hasBanner ? '08' : '10'}` }}
-            >
-              <div className="h-1 rounded-full bg-slate-100 w-full" />
-              <div className="h-1 rounded-full bg-slate-100 w-full" />
-              <div className="h-1 rounded-full bg-slate-100 w-2/3" />
-            </div>
-            <div className="flex-1 space-y-2.5">
-              <div className="h-1 rounded-full bg-slate-100 w-full" />
-              <div className="h-1 rounded-full bg-slate-100 w-full" />
-              <div className="h-1 rounded-full bg-slate-100 w-4/5" />
-              <div className="h-1.5 grow" />
-              <div className="h-1 rounded-full bg-slate-100 w-full" />
-              <div className="h-1 rounded-full bg-slate-100 w-2/3" />
-            </div>
-          </>
-        ) : (
-          <div className="space-y-2.5 flex-1">
-            <div className="h-1 rounded-full bg-slate-100 w-full opacity-60" />
-            <div className="h-1 rounded-full bg-slate-100 w-4/5 opacity-60" />
-            <div className="h-1.5" />
-            <div className="h-1 rounded-full bg-slate-200/50 w-full" />
-            <div className="h-1 rounded-full bg-slate-200/50 w-full" />
-            <div className="h-1 rounded-full bg-slate-200/50 w-3/5" />
-            <div className="h-1.5" />
-            <div className="h-1 rounded-full bg-slate-200/50 w-full" />
-            <div className="h-1 rounded-full bg-slate-200/50 w-2/3" />
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

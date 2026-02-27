@@ -194,59 +194,66 @@ export async function loadResumeDataFromDB(templateId?: string, explicitId?: str
 }
 
 /**
+ * Variable to track if a save is in progress to prevent duplication
+ */
+let saveLock: Promise<any> | null = null;
+
+/**
  * Save resume data to MongoDB API
  */
 export async function saveResumeDataToDB(data: ResumeData): Promise<string | null> {
-  try {
-    const templateId = data.design?.templateId;
-    const resumeId = getCurrentResumeId(templateId);
+  // If a save is already in progress, wait for it to complete
+  if (saveLock) {
+    await saveLock;
+  }
 
-    if (resumeId) {
-      // Update existing resume
-      const response = await apiClient('/api/resumes', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: resumeId,
-          ...data,
-        }),
-      });
+  // Create a new lock for this save operation
+  const currentSave = (async () => {
+    try {
+      const templateId = data.design?.templateId;
+      const resumeId = getCurrentResumeId(templateId);
 
-      if (response.status === 404) {
-        // Resume not found (deleted, wrong user, or stale ID) - create new
-        setCurrentResumeId(null, templateId);
-        // Fall through to POST below
-      } else if (!response.ok) {
-        throw new Error('Failed to update resume');
-      } else {
-        return resumeId;
+      if (resumeId) {
+        // Update existing resume
+        const response = await apiClient('/api/resumes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: resumeId, ...data }),
+        });
+
+        if (response.status === 404) {
+          setCurrentResumeId(null, templateId);
+        } else if (!response.ok) {
+          throw new Error('Failed to update resume');
+        } else {
+          return resumeId;
+        }
       }
-    }
 
-    {
       // Create new resume
       const response = await apiClient('/api/resumes', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create resume');
-      }
+      if (!response.ok) throw new Error('Failed to create resume');
 
       const result = await response.json();
       setCurrentResumeId(result.id, templateId);
       return result.id;
+    } catch (error) {
+      console.error('Failed to save resume data to DB:', error);
+      return null;
+    } finally {
+      if (saveLock === currentSave) {
+        saveLock = null;
+      }
     }
-  } catch (error) {
-    console.error('Failed to save resume data to DB:', error);
-    return null;
-  }
+  })();
+
+  saveLock = currentSave;
+  return currentSave;
 }
 
 /**

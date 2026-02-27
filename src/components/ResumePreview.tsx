@@ -65,6 +65,7 @@ interface ResumePreviewProps {
   isSaved?: boolean;
   viewMode?: 'split' | 'info' | 'preview';
   onViewModeChange?: (mode: 'split' | 'info' | 'preview') => void;
+  showControls?: boolean;
 }
 
 const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
@@ -75,14 +76,15 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
   onToggleSection,
   isSaved = true,
   viewMode = 'split',
-  onViewModeChange
+  onViewModeChange,
+  showControls = true
 }, ref) => {
   const { data: storeData } = useResumeStore();
   const data = propData || storeData;
   const { isAuthenticated } = useAuth();
   const [isClient, setIsClient] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(0.8); // Default zoom slightly smaller for visibility
+  const [zoomLevel, setZoomLevel] = useState(showControls ? 0.8 : 1); // Default zoom 1 if no controls
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Expose download function to parent via ref
@@ -890,59 +892,60 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
 
   // --- Render ---
   return (
-    <div className={cn("flex flex-col items-center", className)}>
+    <div className={cn(!showControls ? "w-full h-full flex flex-col items-center justify-start overflow-hidden" : "flex flex-col items-center", className)}>
       {/* Toolbar */}
-      <div className="w-full max-w-2xl mb-4 flex justify-between items-center bg-white p-2 rounded-lg shadow-sm border">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}>
-            <ZoomOut className="w-4 h-4" />
-          </Button>
-          <span className="text-xs font-mono">{Math.round(zoomLevel * 100)}%</span>
-          <Button variant="ghost" size="sm" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}>
-            <ZoomIn className="w-4 h-4" />
-          </Button>
-        </div>
+      {showControls && (
+        <div className="w-full max-w-2xl mb-4 flex justify-between items-center bg-white p-2 rounded-lg shadow-sm border">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}>
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+            <span className="text-xs font-mono">{Math.round(zoomLevel * 100)}%</span>
+            <Button variant="ghost" size="sm" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}>
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+          </div>
 
-        <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-100">
-          <Button
-            variant={viewMode === 'info' ? 'secondary' : 'ghost'}
-            size="sm"
-            className={cn(
-              "h-8 px-3 rounded-sm text-[10px] font-bold uppercase tracking-tight gap-1.5 transition-all",
-              viewMode === 'info' ? "bg-white shadow-sm ring-1 ring-slate-200 text-slate-900" : "text-slate-500"
-            )}
-            onClick={() => onViewModeChange?.('info')}
-          >
-            <Type className="w-3.5 h-3.5" />
-            <span>Content</span>
-          </Button>
-          <Button
-            variant={viewMode === 'split' ? 'secondary' : 'ghost'}
-            size="sm"
-            className={cn(
-              "h-8 px-3 rounded-sm text-[10px] font-bold uppercase tracking-tight gap-1.5 transition-all",
-              viewMode === 'split' ? "bg-white shadow-sm ring-1 ring-slate-200 text-slate-900" : "text-slate-500"
-            )}
-            onClick={() => onViewModeChange?.('split')}
-          >
-            <Columns2 className="w-3.5 h-3.5" />
-            <span>Split View</span>
-          </Button>
-          <Button
-            variant={viewMode === 'preview' ? 'secondary' : 'ghost'}
-            size="sm"
-            className={cn(
-              "h-8 px-3 rounded-sm text-[10px] font-bold uppercase tracking-tight gap-1.5 transition-all",
-              viewMode === 'preview' ? "bg-white shadow-sm ring-1 ring-slate-200 text-slate-900" : "text-slate-500"
-            )}
-            onClick={() => onViewModeChange?.('preview')}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Preview</span>
-          </Button>
-
+          <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-md border border-slate-100">
+            <Button
+              variant={viewMode === 'info' ? 'secondary' : 'ghost'}
+              size="sm"
+              className={cn(
+                "h-8 px-3 rounded-sm text-[10px] font-bold uppercase tracking-tight gap-1.5 transition-all",
+                viewMode === 'info' ? "bg-white shadow-sm ring-1 ring-slate-200 text-slate-900" : "text-slate-500"
+              )}
+              onClick={() => onViewModeChange?.('info')}
+            >
+              <Type className="w-3.5 h-3.5" />
+              <span>Content</span>
+            </Button>
+            <Button
+              variant={viewMode === 'split' ? 'secondary' : 'ghost'}
+              size="sm"
+              className={cn(
+                "h-8 px-3 rounded-sm text-[10px] font-bold uppercase tracking-tight gap-1.5 transition-all",
+                viewMode === 'split' ? "bg-white shadow-sm ring-1 ring-slate-200 text-slate-900" : "text-slate-500"
+              )}
+              onClick={() => onViewModeChange?.('split')}
+            >
+              <Columns2 className="w-3.5 h-3.5" />
+              <span>Split View</span>
+            </Button>
+            <Button
+              variant={viewMode === 'preview' ? 'secondary' : 'ghost'}
+              size="sm"
+              className={cn(
+                "h-8 px-3 rounded-sm text-[10px] font-bold uppercase tracking-tight gap-1.5 transition-all",
+                viewMode === 'preview' ? "bg-white shadow-sm ring-1 ring-slate-200 text-slate-900" : "text-slate-500"
+              )}
+              onClick={() => onViewModeChange?.('preview')}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Preview</span>
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Preview Area */}
       <div
@@ -999,7 +1002,11 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                   width="794px"
                   height="1123px"
                   style={{
-                    marginBottom: zoomLevel < 1 ? `calc(${(zoomLevel - 1) * 1123}px + 2rem)` : '2rem'
+                    marginBottom: !showControls ? '0' : (zoomLevel < 1 ? `calc(${(zoomLevel - 1) * 1123}px + 2rem)` : '2rem'),
+                    boxShadow: !showControls ? 'none' : undefined,
+                    border: !showControls ? 'none' : undefined,
+                    marginRight: !showControls ? '0' : undefined,
+                    marginLeft: !showControls ? '0' : undefined,
                   }}
                 >
                   {isTwoColumn ? (
