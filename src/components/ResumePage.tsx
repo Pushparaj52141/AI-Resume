@@ -139,7 +139,7 @@ export const ResumePage = React.forwardRef<HTMLDivElement, ResumePageProps>(({
                 style={innerStyle}
                 {...props}
             >
-                <div className="min-h-0 flex-1 w-full relative overflow-hidden">
+                <div className="min-h-0 flex-1 w-full relative overflow-visible">
                     {children}
 
                     <div className="absolute bottom-4 right-8 text-[10px] text-slate-300 pointer-events-none hidden">

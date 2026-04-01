@@ -1271,7 +1271,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                       style={{ gridTemplateColumns: twoColumnGridTemplate }}
                     >
                       <div
-                        className="flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden"
+                        className="flex min-h-0 min-w-0 max-w-full flex-col overflow-visible"
                         style={sidebarFirst ? sidebarColumnShellStyle : undefined}
                       >
                         {leftContent.map((block, index) => (
@@ -1285,7 +1285,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                         ))}
                       </div>
                       <div
-                        className="flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden"
+                        className="flex min-h-0 min-w-0 max-w-full flex-col overflow-visible"
                         style={!sidebarFirst ? sidebarColumnShellStyle : undefined}
                       >
                         {rightContent.map((block, index) => (
@@ -1300,7 +1300,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                       </div>
                     </div>
                   ) : (
-                    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+                    <div className="flex min-h-0 min-w-0 flex-col overflow-visible">
                       {page.main.map((block, index) => (
                         <div key={block.id} data-id={block.id} className={cn(
                           block.type === 'header' ? 'header-container' :
