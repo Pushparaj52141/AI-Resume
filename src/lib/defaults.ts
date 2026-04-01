@@ -23,13 +23,16 @@ export const DEFAULT_DESIGN: ResumeDesign = {
     },
     colors: {
         mode: 'basic',
+        themeVariant: 'accent',
         accent: '#3b82f6', // blue-500
         text: '#1f2937', // gray-800
         background: '#ffffff',
         customColors: {},
+        accentApply: {},
     },
     typography: {
         fontFamily: 'Inter',
+        fontCategory: 'sans',
         headings: {
             style: 'classic',
             capitalization: 'uppercase',
@@ -43,6 +46,7 @@ export const DEFAULT_DESIGN: ResumeDesign = {
         subtitlePlacement: 'next-line',
         indentBody: false,
         listStyle: 'bullet',
+        dateColumnMode: 'auto',
     },
     footer: {
         showPageNumbers: false,
@@ -52,6 +56,8 @@ export const DEFAULT_DESIGN: ResumeDesign = {
     advanced: {
         linkIcon: 'icon',
         dateLocationOpacity: 0.8,
+        linkUnderline: true,
+        linkUseAccentBlue: true,
     },
     personalDetails: {
         align: 'left',
@@ -59,9 +65,13 @@ export const DEFAULT_DESIGN: ResumeDesign = {
         iconStyle: 'circle-outline',
         nameSize: 'l',
         nameBold: true,
+        nameFont: 'body',
         showPhoto: false,
         photoSize: 100,
         photoFormat: 'circle',
+        jobTitleSize: 'm',
+        jobTitlePlacement: 'below',
+        jobTitleStyle: 'normal',
     },
     sectionSettings: {
         skills: 'grid',

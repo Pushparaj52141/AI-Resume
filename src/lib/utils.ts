@@ -207,8 +207,9 @@ export async function saveResumeDataToDB(data: ResumeData): Promise<string | nul
     await saveLock;
   }
 
-  // Create a new lock for this save operation
-  const currentSave = (async () => {
+  // Stable ref so the async `finally` can compare to this save without TDZ on a const/let self-reference
+  const saveRef: { promise: Promise<string | null> | null } = { promise: null };
+  saveRef.promise = (async () => {
     try {
       const templateId = data.design?.templateId;
       const resumeId = getCurrentResumeId(templateId);
@@ -246,14 +247,14 @@ export async function saveResumeDataToDB(data: ResumeData): Promise<string | nul
       console.error('Failed to save resume data to DB:', error);
       return null;
     } finally {
-      if (saveLock === currentSave) {
+      if (saveLock === saveRef.promise) {
         saveLock = null;
       }
     }
   })();
 
-  saveLock = currentSave;
-  return currentSave;
+  saveLock = saveRef.promise;
+  return saveRef.promise;
 }
 
 /**
@@ -382,7 +383,7 @@ export function getGoogleFontUrl(fontFamily: string): string | null {
   }
   const fontKey = GOOGLE_FONTS[fontFamily];
   if (!fontKey) return null;
-  return `https://fonts.googleapis.com/css2?family=${fontKey}:wght@300;400;500;600;700;800;900&display=swap`;
+  return `https://fonts.googleapis.com/css2?family=${fontKey}:wght@400;500;600;700;800&display=swap`;
 }
 
 /**

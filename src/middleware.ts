@@ -5,6 +5,17 @@ import * as jose from 'jose';
 const ACCESS_COOKIE = 'access_token';
 const REFRESH_COOKIE = 'refresh_token';
 
+/** Edge-safe: some runtimes omit Headers#getSetCookie; fall back to a single header. */
+function getSetCookieHeaders(res: Response): string[] {
+  const headers = res.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headers.getSetCookie === 'function') {
+    const list = headers.getSetCookie();
+    if (list?.length) return list;
+  }
+  const single = res.headers.get('set-cookie');
+  return single ? [single] : [];
+}
+
 async function verifyToken(token: string, secret: string): Promise<boolean> {
   if (!secret || secret.length < 32) return false;
   const key = new TextEncoder().encode(secret);
@@ -34,14 +45,11 @@ async function tryRefreshToken(request: NextRequest): Promise<NextResponse | nul
       return null;
     }
 
-    // Get the new cookies from the refresh response
-    const setCookieHeaders = refreshResponse.headers.getSetCookie();
+    const setCookieHeaders = getSetCookieHeaders(refreshResponse);
 
-    // Create a response that continues the request
     const response = NextResponse.next();
 
-    // Copy the new auth cookies to the response
-    setCookieHeaders.forEach(cookie => {
+    setCookieHeaders.forEach((cookie) => {
       response.headers.append('Set-Cookie', cookie);
     });
 

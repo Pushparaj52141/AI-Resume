@@ -29,6 +29,8 @@ export interface Experience {
   current: boolean;
   description: string;
   achievements: string[];
+  /** Optional work location (shown in preview when set). */
+  location?: string;
   visible?: boolean;
 }
 
@@ -179,10 +181,21 @@ export interface ResumeDesign {
     entrySpacing: number;
   };
   colors: {
-    mode: 'basic' | 'advanced';
+    mode: 'basic' | 'advanced' | 'border';
     accent: string;
     text: string;
     background: string;
+    /** Fills the sidebar column in two-column layouts (e.g. sage / accent sidebars) */
+    sidebarBackground?: string;
+    /** FlowCV-style: accent / multi-tone / image background */
+    themeVariant?: 'accent' | 'multi' | 'image';
+    /** When themeVariant is image: cover background (https or data:image only) */
+    backgroundImage?: string;
+    /** When true, that element group uses accent (unless overridden in customColors). */
+    accentApply?: Partial<Record<
+      'name' | 'jobTitle' | 'headings' | 'headerIcons' | 'dotsBarsBubbles' | 'dates' | 'entries' | 'links',
+      boolean
+    >>;
     customColors: {
       name?: string;
       jobTitle?: string;
@@ -190,11 +203,14 @@ export interface ResumeDesign {
       headerIcons?: string;
       dotsBarsBubbles?: string;
       dates?: string;
+      entries?: string;
       linkIcons?: string;
     };
   };
   typography: {
     fontFamily: string;
+    /** Filter font picker: sans / serif / mono */
+    fontCategory?: 'sans' | 'serif' | 'mono';
     headings: {
       style: string;
       capitalization: 'none' | 'capitalize' | 'uppercase';
@@ -208,6 +224,8 @@ export interface ResumeDesign {
     subtitlePlacement: 'same-line' | 'next-line';
     indentBody: boolean;
     listStyle: 'bullet' | 'hyphen';
+    /** FlowCV-style date column behavior (preview uses auto for now; manual reserved) */
+    dateColumnMode?: 'auto' | 'manual';
   };
   footer: {
     showPageNumbers: boolean;
@@ -217,6 +235,11 @@ export interface ResumeDesign {
   advanced: {
     linkIcon: 'none' | 'icon' | 'external';
     dateLocationOpacity: number;
+    /** Applied to the sidebar column’s left edge (e.g. decorative accent strip) */
+    sidebarBorderLeft?: string;
+    linkUnderline?: boolean;
+    /** When true, links use accent/blue styling; when false, follow text color */
+    linkUseAccentBlue?: boolean;
   };
   personalDetails: {
     align: 'left' | 'center' | 'right';
@@ -224,11 +247,16 @@ export interface ResumeDesign {
     iconStyle: 'none' | 'circle-filled' | 'rounded-filled' | 'square-filled' | 'circle-outline' | 'rounded-outline' | 'square-outline';
     nameSize: 'xs' | 's' | 'm' | 'l' | 'xl';
     nameBold: boolean;
+    /** Body stack vs a distinct “creative” serif display for the name */
+    nameFont?: 'body' | 'creative';
     showPhoto: boolean;
     photoSize: number;
     photoFormat: 'circle' | 'rounded' | 'square';
     banner?: boolean;
     bannerTextColor?: string;
+    jobTitleSize?: 's' | 'm' | 'l';
+    jobTitlePlacement?: 'same-line' | 'below';
+    jobTitleStyle?: 'normal' | 'italic';
   };
   sectionSettings: {
     skills: 'grid' | 'level' | 'compact' | 'bubble';

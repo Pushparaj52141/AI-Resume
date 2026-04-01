@@ -24,6 +24,16 @@ interface RichTextEditorProps {
     onAssist?: (mode: 'improve' | 'grammar' | 'shorter') => void;
 }
 
+function richTextPropsEqual(prev: RichTextEditorProps, next: RichTextEditorProps) {
+    return (
+        prev.value === next.value &&
+        prev.placeholder === next.placeholder &&
+        prev.className === next.className &&
+        prev.minHeight === next.minHeight &&
+        prev.onAssist === next.onAssist
+    );
+}
+
 const RichTextEditor: React.FC<RichTextEditorProps> = ({
     value,
     onChange,
@@ -235,4 +245,4 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     );
 };
 
-export default RichTextEditor;
+export default React.memo(RichTextEditor, richTextPropsEqual);

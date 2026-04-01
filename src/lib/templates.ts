@@ -1,4 +1,4 @@
-import type { ResumeDesign } from './types';
+import type { ResumeData, ResumeDesign } from './types';
 import { DEFAULT_DESIGN } from './defaults';
 import {
   TEMPLATE_SPECS,
@@ -83,6 +83,40 @@ export const TEMPLATES: Template[] = TEMPLATE_SPECS.map((spec) => ({
   design: buildDesignFromSpec(spec),
 }));
 
+/** Removed templates: map old id → replacement for URLs and saved resumes */
+export const LEGACY_TEMPLATE_ID_MAP: Record<string, string> = {
+  jaganraj: 'classic',
+};
+
+export function resolveTemplateId(id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  return LEGACY_TEMPLATE_ID_MAP[id] ?? id;
+}
+
 export function getTemplateById(id: string): Template | undefined {
-  return TEMPLATES.find((t) => t.id === id);
+  const resolved = resolveTemplateId(id) ?? id;
+  return TEMPLATES.find((t) => t.id === resolved);
+}
+
+/** Migrate stored resumes that reference a removed template id */
+export function normalizeResumeTemplateIds(data: ResumeData): ResumeData {
+  const tid = data.design?.templateId;
+  if (!tid) return data;
+  const resolved = resolveTemplateId(tid);
+  if (resolved === undefined || resolved === tid) return data;
+  const replacement = getTemplateById(resolved);
+  if (!replacement) {
+    return {
+      ...data,
+      design: { ...(data.design ?? DEFAULT_DESIGN), templateId: resolved },
+    };
+  }
+  return {
+    ...data,
+    design: {
+      ...replacement.design,
+      ...data.design,
+      templateId: resolved,
+    },
+  };
 }

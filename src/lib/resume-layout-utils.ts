@@ -15,7 +15,8 @@ export type BlockType =
     | 'section-title'
     | 'section-item'
     | 'section-group' // For grouped items like skills
-    | 'spacer';
+    | 'spacer'
+    | 'page-break'; // Zero-height marker; pagination flushes before next block
 
 export interface ResumeBlock {
     id: string;
@@ -38,7 +39,7 @@ const splitHtmlIntoChunks = (html: string): { content: string; type: 'bullet' | 
     const cleanedHtml = html.replace(/<ul[^>]*>|<\/ul>|<ol[^>]*>|<\/ol>/gi, '');
 
     // Split by <li> tags while capturing the tags themselves
-    const parts = cleanedHtml.split(/(<li[^>]*>.*?<\/li>)/gs);
+    const parts = cleanedHtml.split(/(<li[^>]*>[\s\S]*?<\/li>)/g);
 
     parts.forEach(part => {
         if (!part) return;
@@ -48,7 +49,7 @@ const splitHtmlIntoChunks = (html: string): { content: string; type: 'bullet' | 
 
         if (trimmed.startsWith('<li')) {
             // Extract content inside <li>
-            const content = trimmed.replace(/<li[^>]*>(.*?)<\/li>/gs, '$1').trim();
+            const content = trimmed.replace(/<li[^>]*>([\s\S]*?)<\/li>/g, '$1').trim();
             if (content) {
                 chunks.push({ content, type: 'bullet' });
             }
@@ -183,7 +184,7 @@ export const flattenResumeData = (data: ResumeData, selectedSections: string[]):
                             content: { ...proj, _renderType: 'header', _isLastChunk: !hasDescription }
                         });
 
-                        if (hasDescription) {
+                        if (hasDescription && proj.description) {
                             const chunks = splitHtmlIntoChunks(proj.description);
                             if (chunks.length > 0) {
                                 chunks.forEach((chunk, cIdx) => {

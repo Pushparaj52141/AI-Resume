@@ -28,34 +28,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      // First, try to get user info with current token
-      let res = await fetch('/api/auth/me', { credentials: 'include' });
+      // /api/auth/me renews the access token via refresh cookie when the access token is expired
+      const res = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
 
-      // If unauthorized, try to refresh the token first
-      if (res.status === 401) {
-        console.log('Access token expired, refreshing...');
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+      } else if (res.status === 401) {
+        // No valid access + refresh (or refresh revoked)
         const refreshRes = await fetch('/api/auth/refresh', {
           method: 'POST',
           credentials: 'include',
         });
-
         if (refreshRes.ok) {
-          console.log('Token refreshed, retrying /me...');
-          // Retry getting user info with the new token
-          res = await fetch('/api/auth/me', { credentials: 'include' });
+          const retry = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
+          if (retry.ok) {
+            const data = await retry.json();
+            setUser(data.user);
+          } else {
+            setUser(null);
+          }
         } else {
-          console.log('Token refresh failed');
           setUser(null);
-          setLoading(false);
-          setInitialized(true);
-          return;
         }
-      }
-
-      // Process the response
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
       } else {
         setUser(null);
       }
@@ -71,6 +66,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Keep access token fresh before the 15m expiry while the tab is open (refresh token remains valid 7d)
+  useEffect(() => {
+    if (!user) return;
+    const intervalMs = 10 * 60 * 1000; // 10 minutes
+    const id = window.setInterval(() => {
+      void fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [user]);
+
+  // After sleep or a long background tab, access token may be expired — refresh session via /me
+  useEffect(() => {
+    if (!user) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [user, refresh]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<{ error?: string }> => {

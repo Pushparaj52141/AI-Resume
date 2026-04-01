@@ -106,6 +106,8 @@ const DEFAULT_RESUME_DATA: ResumeData = {
   selectedSections: ['personalInfo', 'summary', 'experience', 'education', 'skills'],
 };
 
+const isDev = process.env.NODE_ENV === 'development';
+
 export const useResumeStore = create<ResumeState>()(
   devtools(
     persist(
@@ -162,6 +164,7 @@ export const useResumeStore = create<ResumeState>()(
           return rest;
         },
       }
-    )
+    ),
+    { name: 'resume-store', enabled: isDev }
   )
 );

@@ -645,8 +645,50 @@
 .section {
   margin-top: 0;
   margin-bottom: 12px;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 .resume-page>.section:last-child {
   margin-bottom: 0;
+}
+
+/* FlowCV-style customize sliders (tick track + rounded thumb) */
+.customize-flow-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #e2e8f0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    #cbd5e1 0,
+    #cbd5e1 1px,
+    transparent 1px,
+    transparent 9px
+  );
+  background-size: 100% 100%;
+  cursor: pointer;
+}
+
+.customize-flow-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  background: hsl(var(--primary));
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.2);
+}
+
+.customize-flow-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  background: hsl(var(--primary));
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.2);
 }

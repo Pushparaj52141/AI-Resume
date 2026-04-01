@@ -49,7 +49,8 @@ import {
   Eye,
   EyeOff,
   Trash2,
-  Calendar
+  Calendar,
+  Languages
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -3083,7 +3084,19 @@ const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalIn
               <div className="space-y-2">
                 <Label>Target Company (Optional)</Label>
                 <Input
-                  value={data.design?.themeColor === 'custom' ? '' : '' /* Placeholder for now if needed */}
+                  value={data.jobTarget?.company ?? ''}
+                  onChange={(e) =>
+                    onChange({
+                      ...data,
+                      jobTarget: {
+                        position: data.jobTarget?.position ?? '',
+                        company: e.target.value,
+                        ...(data.jobTarget?.description !== undefined && {
+                          description: data.jobTarget.description,
+                        }),
+                      },
+                    })
+                  }
                   placeholder="Google, etc."
                   className="bg-white"
                 />

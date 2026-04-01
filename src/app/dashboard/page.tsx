@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,7 +37,8 @@ import {
 import { toast } from 'sonner';
 import ResumePreview from '@/components/ResumePreview';
 import atsOptimizedResume from '@/lib/seed/atsOptimizedResume';
-import jaganrajResume from '@/lib/seed/jaganrajResume';
+import creativeShowcaseResume from '@/lib/seed/creativeShowcaseResume';
+import { TEMPLATE_SPECS } from '@/lib/template-design-spec';
 
 interface Resume {
     id: string;
@@ -218,13 +219,12 @@ export default function DashboardPage() {
                         : "flex flex-col gap-4"
                     }>
                         {/* New Resume Card */}
-                        <motion.button
-                            whileHover={{ scale: 1.01 }}
-                            whileTap={{ scale: 0.99 }}
+                        <button
+                            type="button"
                             onClick={() => setShowTemplateModal(true)}
                             className={viewMode === 'grid'
-                                ? "group relative aspect-[210/297] bg-[#f8f9fa] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-5 hover:border-slate-300 hover:bg-slate-100 transition-all overflow-hidden"
-                                : "group bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center justify-center gap-3 hover:border-slate-300 hover:bg-slate-50 transition-all font-semibold"
+                                ? "group relative aspect-[210/297] bg-[#f8f9fa] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-5 hover:border-slate-300 hover:bg-slate-100 active:scale-[0.99] transition-all overflow-hidden"
+                                : "group bg-white border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center justify-center gap-3 hover:border-slate-300 hover:bg-slate-50 active:scale-[0.99] transition-all font-semibold"
                             }
                         >
                             <div className="p-4 bg-white rounded-2xl group-hover:scale-110 transition-transform shadow-sm flex items-center justify-center">
@@ -233,19 +233,17 @@ export default function DashboardPage() {
                             <span className="text-[#64748b] font-bold text-lg group-hover:text-slate-900 transition-colors">
                                 New Resume
                             </span>
-                        </motion.button>
+                        </button>
 
                         {/* Resume List */}
-                        <AnimatePresence mode="popLayout">
-                            {filteredResumes.map((resume, idx) => (
-                                <ResumeCard
-                                    key={resume.id}
-                                    resume={resume}
-                                    viewMode={viewMode}
-                                    onDelete={() => handleDeleteResume(resume.id)}
-                                />
-                            ))}
-                        </AnimatePresence>
+                        {filteredResumes.map((resume) => (
+                            <ResumeCard
+                                key={resume.id}
+                                resume={resume}
+                                viewMode={viewMode}
+                                onDelete={() => handleDeleteResume(resume.id)}
+                            />
+                        ))}
                     </div>
                 )}
 
@@ -356,6 +354,26 @@ export default function DashboardPage() {
 
 function ResumeCard({ resume, viewMode, onDelete }: { resume: Resume, viewMode: 'grid' | 'list', onDelete: () => void }) {
     const router = useRouter();
+    const thumbRef = useRef<HTMLDivElement>(null);
+    const [thumbVisible, setThumbVisible] = useState(false);
+
+    useEffect(() => {
+        if (viewMode !== 'grid') return;
+        const el = thumbRef.current;
+        if (!el) return;
+        const io = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) {
+                    setThumbVisible(true);
+                    io.disconnect();
+                }
+            },
+            { rootMargin: '200px', threshold: 0 }
+        );
+        io.observe(el);
+        return () => io.disconnect();
+    }, [viewMode, resume.id]);
+
     const formattedDate = new Date(resume.updatedAt).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -364,12 +382,8 @@ function ResumeCard({ resume, viewMode, onDelete }: { resume: Resume, viewMode: 
 
     if (viewMode === 'list') {
         return (
-            <motion.div
-                layout
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                className="group bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between hover:shadow-lg hover:border-slate-300 transition-all"
+            <div
+                className="group bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between hover:shadow-lg hover:border-slate-300 transition-shadow duration-200"
             >
                 <div className="flex items-center gap-4 flex-1">
                     <div className="w-12 h-16 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-600 transition-colors border border-slate-100">
@@ -415,37 +429,36 @@ function ResumeCard({ resume, viewMode, onDelete }: { resume: Resume, viewMode: 
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
-            </motion.div>
+            </div>
         );
     }
 
     return (
-        <motion.div
-            layout
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            className="group flex flex-col gap-3"
-        >
+        <div className="group flex flex-col gap-3">
             <div
+                ref={thumbRef}
                 className="relative aspect-[210/297] bg-[#f8f9fa] border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:border-slate-300 transition-all cursor-pointer flex items-center justify-center"
                 onClick={() => router.push(`/builder?id=${resume.id}`)}
             >
-                {/* Real High-Fidelity Thumbnail centered and scaled */}
-                <div className="absolute inset-0 pointer-events-none select-none flex justify-center">
-                    <div className="origin-top mt-4 shadow-2xl" style={{
-                        width: '794px',
-                        height: '1123px',
-                        transform: 'scale(0.3)',
-                    }}>
-                        <ResumePreview
-                            data={resume as any}
-                            selectedSections={['personalInfo', 'summary', 'experience', 'education', 'skills', 'projects', 'languages']}
-                            isSaved={true}
-                            showControls={false}
-                        />
+                {thumbVisible ? (
+                    <div className="absolute inset-0 pointer-events-none select-none flex justify-center">
+                        <div className="origin-top mt-4 shadow-2xl" style={{
+                            width: '794px',
+                            height: '1123px',
+                            transform: 'scale(0.3)',
+                        }}>
+                            <ResumePreview
+                                data={resume as any}
+                                selectedSections={['personalInfo', 'summary', 'experience', 'education', 'skills', 'projects', 'languages']}
+                                isSaved={true}
+                                showControls={false}
+                                thumbnailMode
+                            />
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="absolute inset-0 bg-slate-200/50 animate-pulse" aria-hidden />
+                )}
 
                 {/* Hover Overlay */}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -481,16 +494,18 @@ function ResumeCard({ resume, viewMode, onDelete }: { resume: Resume, viewMode: 
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-        </motion.div>
+        </div>
     );
 }
 
 function ActionOption({ title, icon, onClick }: { title: string, icon: React.ReactNode, onClick: () => void }) {
     return (
-        <motion.div
-            whileHover={{ scale: 1.01 }}
-            className="flex-1 min-h-[140px] flex flex-col gap-3 group cursor-pointer"
+        <div
+            className="flex-1 min-h-[140px] flex flex-col gap-3 group cursor-pointer hover:opacity-95 transition-opacity"
             onClick={onClick}
+            onKeyDown={(e) => e.key === 'Enter' && onClick()}
+            role="button"
+            tabIndex={0}
         >
             <div
                 className="flex-1 bg-slate-50/50 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-3 transition-colors group-hover:bg-slate-100 group-hover:border-slate-300"
@@ -498,41 +513,62 @@ function ActionOption({ title, icon, onClick }: { title: string, icon: React.Rea
                 <div>{icon}</div>
                 <h4 className="font-bold text-[#64748b] text-[15px] group-hover:text-slate-900 transition-colors">{title}</h4>
             </div>
-        </motion.div>
+        </div>
     );
 }
 
 function TemplateOption({ template, onSelect }: { template: Template, onSelect: (id: string) => void }) {
-    const isCreative = (template as any).persona === 'creative';
+    const cardRef = useRef<HTMLDivElement>(null);
+    const [inView, setInView] = useState(false);
+
+    const isCreative = TEMPLATE_SPECS.find((s) => s.id === template.id)?.persona === 'creative';
     const previewData = {
-        ...(isCreative ? jaganrajResume : atsOptimizedResume),
+        ...(isCreative ? creativeShowcaseResume : atsOptimizedResume),
         design: template.design
     };
 
+    useEffect(() => {
+        const el = cardRef.current;
+        if (!el) return;
+        const io = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) {
+                    setInView(true);
+                    io.disconnect();
+                }
+            },
+            { rootMargin: '240px', threshold: 0 }
+        );
+        io.observe(el);
+        return () => io.disconnect();
+    }, [template.id]);
+
     return (
-        <motion.div
-            whileHover={{ y: -6 }}
-            className="group flex flex-col gap-4"
-        >
+        <div className="group flex flex-col gap-4 hover:-translate-y-1 transition-transform duration-200">
             <div
+                ref={cardRef}
                 className="relative aspect-[210/297] bg-[#f8f9fa] rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:border-slate-300 transition-all cursor-pointer group/card flex justify-center"
                 onClick={() => onSelect(template.id)}
             >
-                {/* Real High-Fidelity Thumbnail centered and scaled */}
-                <div className="absolute inset-0 pointer-events-none select-none flex justify-center">
-                    <div className="origin-top mt-4 shadow-2xl" style={{
-                        width: '794px',
-                        height: '1123px',
-                        transform: 'scale(0.3)',
-                    }}>
-                        <ResumePreview
-                            data={previewData}
-                            selectedSections={isCreative ? ['personalInfo', 'summary', 'experience', 'education', 'skills', 'projects', 'languages'] : ['personalInfo', 'summary', 'experience', 'education', 'skills']}
-                            isSaved={true}
-                            showControls={false}
-                        />
+                {inView ? (
+                    <div className="absolute inset-0 pointer-events-none select-none flex justify-center">
+                        <div className="origin-top mt-4 shadow-2xl" style={{
+                            width: '794px',
+                            height: '1123px',
+                            transform: 'scale(0.3)',
+                        }}>
+                            <ResumePreview
+                                data={previewData}
+                                selectedSections={isCreative ? ['personalInfo', 'summary', 'experience', 'education', 'skills', 'projects', 'languages'] : ['personalInfo', 'summary', 'experience', 'education', 'skills']}
+                                isSaved={true}
+                                showControls={false}
+                                thumbnailMode
+                            />
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="absolute inset-0 bg-slate-200/50 animate-pulse" aria-hidden />
+                )}
 
                 <div className="absolute inset-0 bg-black/0 group-hover/card:bg-black/5 transition-all flex items-center justify-center opacity-0 group-hover/card:opacity-100">
                     <Button className="gradient-primary text-white font-bold px-8 py-2.5 rounded-full shadow-lg transform translate-y-4 group-hover/card:translate-y-0 transition-all text-sm">
@@ -544,6 +580,6 @@ function TemplateOption({ template, onSelect }: { template: Template, onSelect: 
             <div className="px-1 text-center mt-1">
                 <h4 className="font-extrabold text-[#2d2e2e] text-[11px] uppercase tracking-[0.12em]">{template.name}</h4>
             </div>
-        </motion.div>
+        </div>
     );
 }

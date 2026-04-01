@@ -1,19 +1,18 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, memo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import { FileText, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TEMPLATES, type Template } from '@/lib/templates';
+import { TEMPLATE_SPECS } from '@/lib/template-design-spec';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/apiClient';
-import { loadAllGoogleFonts } from '@/lib/utils';
 import { Eye, X } from 'lucide-react';
 import ResumePreview from '@/components/ResumePreview';
 import atsOptimizedResume from '@/lib/seed/atsOptimizedResume';
-import jaganrajResume from '@/lib/seed/jaganrajResume';
+import creativeShowcaseResume from '@/lib/seed/creativeShowcaseResume';
 
 const ALL_SECTIONS = [
   'personalInfo',
@@ -33,34 +32,87 @@ const ALL_SECTIONS = [
   'declaration'
 ];
 
-function TemplateThumbnail({ template }: { template: Template }) {
-  const isCreative = (template as any).persona === 'creative';
+/** A4 page at 96dpi — must match ResumePreview / ResumePage */
+const PAGE_W = 794;
+const PAGE_H = 1123;
+
+const TemplateThumbnail = memo(function TemplateThumbnail({ template }: { template: Template }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.35);
+  const [inView, setInView] = useState(false);
+
+  const isCreative =
+    TEMPLATE_SPECS.find((s) => s.id === template.id)?.persona === 'creative';
   const previewData = {
-    ...(isCreative ? jaganrajResume : atsOptimizedResume),
+    ...(isCreative ? creativeShowcaseResume : atsOptimizedResume),
     design: template.design
   };
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '200px', threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!inView) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      if (w > 0) setScale(w / PAGE_W);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [inView]);
+
   return (
     <div
-      className="w-full aspect-[210/297] bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm flex flex-col transition-all group-hover:shadow-md pointer-events-none select-none relative"
+      ref={containerRef}
+      className="relative w-full aspect-[210/297] overflow-hidden rounded-lg bg-white shadow-[0_2px_14px_rgba(15,23,42,0.08),0_0_0_1px_rgba(15,23,42,0.05)] ring-1 ring-slate-900/[0.04] transition-shadow group-hover:shadow-[0_6px_24px_rgba(15,23,42,0.12)] pointer-events-none select-none"
+      title="A4 (210 × 297 mm) preview"
     >
-      <div className="absolute inset-0">
-        <div className="origin-top-left" style={{
-          width: '794px',
-          height: '1123px',
-          transform: 'scale(0.3)', // Adjust scale for gallery width
-        }}>
-          <ResumePreview
-            data={previewData}
-            selectedSections={isCreative ? ALL_SECTIONS : ['personalInfo', 'summary', 'experience', 'education', 'skills']}
-            isSaved={true}
-            showControls={false}
-          />
+      {!inView ? (
+        <div className="absolute inset-0 bg-slate-100 animate-pulse" aria-hidden />
+      ) : (
+        <div
+          className="absolute left-0 top-0 origin-top-left"
+          style={{
+            width: PAGE_W,
+            height: PAGE_H,
+            transform: `scale(${scale})`,
+          }}
+        >
+          <div className="overflow-hidden" style={{ width: PAGE_W, height: PAGE_H }}>
+            <ResumePreview
+              data={previewData}
+              selectedSections={
+                isCreative
+                  ? ALL_SECTIONS
+                  : ['personalInfo', 'summary', 'experience', 'education', 'skills']
+              }
+              isSaved={true}
+              showControls={false}
+              thumbnailMode
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
-}
+});
 
 export default function TemplatesPage() {
   const router = useRouter();
@@ -69,8 +121,6 @@ export default function TemplatesPage() {
   const [userResumes, setUserResumes] = React.useState<Record<string, any>>({});
 
   useEffect(() => {
-    loadAllGoogleFonts();
-
     // Fetch user's resumes to show actual content in previews if available
     const fetchUserResumes = async () => {
       try {
@@ -100,13 +150,8 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center px-4 py-12 bg-gradient-to-b from-background to-orange-50/30">
-      <motion.div
-        className="w-full max-w-5xl"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+    <div className="min-h-screen px-4 py-12 bg-gradient-to-b from-slate-100 via-background to-slate-100/80">
+      <div className="mx-auto w-full min-w-0 max-w-7xl">
         <Link
           href="/"
           className="flex items-center gap-3 justify-center mb-8 hover:opacity-90"
@@ -124,22 +169,21 @@ export default function TemplatesPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {TEMPLATES.map((template, index) => (
-            <motion.div
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] sm:grid-cols-[repeat(2,minmax(0,1fr))] lg:grid-cols-[repeat(3,minmax(0,1fr))] xl:grid-cols-[repeat(4,minmax(0,1fr))] gap-6 items-stretch">
+          {TEMPLATES.map((template) => (
+            <div
               key={template.id}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: index * 0.05 }}
-              className="glass-card rounded-2xl border border-orange-200/30 shadow-xl overflow-hidden hover:shadow-2xl hover:border-orange-300/50 transition-all group"
+              className="glass-card min-w-0 rounded-2xl border border-orange-200/30 shadow-xl overflow-hidden hover:shadow-2xl hover:border-orange-300/50 transition-shadow duration-200 group flex flex-col h-full min-h-0"
             >
-              <div className="p-4 bg-slate-50/50 border-b border-slate-200/50">
+              <div className="shrink-0 border-b border-slate-300/40 bg-[#d8dce3] p-3 sm:p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]">
                 <TemplateThumbnail template={template} />
               </div>
-              <div className="p-5">
-                <h2 className="text-lg font-bold text-foreground mb-1">{template.name}</h2>
-                <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{template.description}</p>
-                <div className="flex gap-2">
+              <div className="p-5 flex flex-col flex-1 min-h-0">
+                <h2 className="text-lg font-bold text-foreground mb-1 line-clamp-2">{template.name}</h2>
+                <p className="text-sm text-muted-foreground mb-4 line-clamp-2 flex-1 min-h-[2.75rem]">
+                  {template.description}
+                </p>
+                <div className="flex gap-2 mt-auto shrink-0">
                   <Button
                     variant="outline"
                     onClick={() => setPreviewTemplate(template)}
@@ -157,14 +201,14 @@ export default function TemplatesPage() {
                   </Button>
                 </div>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
           Signed in as <span className="font-medium text-foreground">{user?.email}</span>
         </p>
-      </motion.div>
+      </div>
 
       {/* Template Preview Modal */}
       {previewTemplate && (
@@ -197,16 +241,23 @@ export default function TemplatesPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200/30 flex justify-center">
-              <div className="pointer-events-none select-none transform origin-top scale-[0.6] sm:scale-75 lg:scale-90 transition-transform flex flex-col gap-8 pb-20">
+            <div className="flex flex-1 justify-center overflow-y-auto bg-[#c5cad3]/50 px-3 py-6 sm:px-6 sm:py-8">
+              <div className="pointer-events-none flex w-full max-w-4xl origin-top scale-[0.52] select-none transition-transform sm:scale-[0.62] md:scale-[0.72] lg:scale-[0.8]">
                 <ResumePreview
                   data={userResumes[previewTemplate.id] || {
-                    ...(previewTemplate.persona === 'creative' ? jaganrajResume : atsOptimizedResume),
+                    ...(TEMPLATE_SPECS.find((s) => s.id === previewTemplate.id)?.persona === 'creative'
+                      ? creativeShowcaseResume
+                      : atsOptimizedResume),
                     jobTitle: `${previewTemplate.name} Template`,
                     design: previewTemplate.design
                   }}
-                  selectedSections={previewTemplate.persona === 'creative' ? ALL_SECTIONS : ['personalInfo', 'summary', 'experience', 'education', 'skills']}
-                  isSaved={!!userResumes[previewTemplate.id] || previewTemplate.id === 'jaganraj'}
+                  selectedSections={
+                    TEMPLATE_SPECS.find((s) => s.id === previewTemplate.id)?.persona === 'creative'
+                      ? ALL_SECTIONS
+                      : ['personalInfo', 'summary', 'experience', 'education', 'skills']
+                  }
+                  isSaved={!!userResumes[previewTemplate.id]}
+                  showControls={false}
                 />
               </div>
             </div>

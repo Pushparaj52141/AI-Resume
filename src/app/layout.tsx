@@ -8,10 +8,11 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 
-const inter = Inter({ 
+/** Subset of weights — full range + mega Google Fonts link was duplicating downloads and blocking first paint */
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
-  weight: ['300', '400', '500', '600', '700', '800', '900'],
+  weight: ['400', '500', '600', '700', '800'],
   display: 'swap',
   preload: true,
 });
@@ -75,8 +76,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <link rel="dns-prefetch" href="//api.groq.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Preload common Google Fonts for resume builder */}
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Roboto:wght@300;400;500;700;900&family=Open+Sans:wght@300;400;600;700;800&family=Lato:wght@300;400;700;900&family=Poppins:wght@300;400;500;600;700;800&family=Montserrat:wght@300;400;500;600;700;800;900&family=EB+Garamond:wght@400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Source+Sans+Pro:wght@300;400;600;700;900&family=Raleway:wght@300;400;500;600;700;800;900&family=Crimson+Text:wght@400;600;700&family=Libre+Baskerville:wght@400;700&family=Lora:wght@400;500;600;700&family=PT+Serif:wght@400;700&family=Roboto+Slab:wght@300;400;500;600;700;800;900&family=Work+Sans:wght@300;400;500;600;700;800;900&family=Nunito:wght@300;400;600;700;800;900&family=Ubuntu:wght@300;400;500;700&family=Oswald:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body 
         className={`${inter.variable} font-sans antialiased overflow-x-hidden`}

@@ -38,13 +38,14 @@ import {
   User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ResumeData } from '@/lib/types';
-import { cn, formatDate, loadGoogleFont, loadAllGoogleFonts, getGoogleFontUrl, decodeHtml } from '@/lib/utils';
+import type { PersonalInfo, ResumeData } from '@/lib/types';
+import { cn, formatDate, loadGoogleFont, getGoogleFontUrl, decodeHtml } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { extractProfessionalSummary } from '@/lib/resume-parser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_DESIGN } from '@/lib/defaults';
 import { flattenResumeData, distributeBlocksByLayout, ResumeBlock } from '@/lib/resume-layout-utils';
+import { resumeColorCssVars } from '@/lib/design-colors';
 import { useResumePagination } from '@/hooks/useResumePagination';
 import { ResumePage } from '@/components/ResumePage';
 
@@ -66,6 +67,8 @@ interface ResumePreviewProps {
   viewMode?: 'split' | 'info' | 'preview';
   onViewModeChange?: (mode: 'split' | 'info' | 'preview') => void;
   showControls?: boolean;
+  /** Skip pagination + hidden measurement DOM (template grids, dashboard cards). Builder/export should stay false. */
+  thumbnailMode?: boolean;
 }
 
 const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
@@ -77,12 +80,13 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
   isSaved = true,
   viewMode = 'split',
   onViewModeChange,
-  showControls = true
+  showControls = true,
+  thumbnailMode = false,
 }, ref) => {
   const { data: storeData } = useResumeStore();
   const data = propData || storeData;
   const { isAuthenticated } = useAuth();
-  const [isClient, setIsClient] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(showControls ? 0.8 : 1); // Default zoom 1 if no controls
   const previewRef = useRef<HTMLDivElement>(null);
@@ -96,8 +100,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
   const design = data.design || DEFAULT_DESIGN;
 
   useEffect(() => {
-    setIsClient(true);
-    loadAllGoogleFonts();
+    setMounted(true);
   }, []);
 
   useEffect(() => {
@@ -109,15 +112,19 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
   // --- Design Helpers ---
   const getDesignStyles = () => {
     const { spacing, colors, typography, personalDetails } = design;
+    const nameFf =
+      personalDetails.nameFont === 'creative'
+        ? 'Georgia, "Times New Roman", "Libre Baskerville", serif'
+        : typography.fontFamily;
     return {
+      ...resumeColorCssVars(colors),
       '--resume-font-size': `${spacing.fontSize}pt`,
       '--resume-line-height': spacing.lineHeight,
       '--resume-margin-lr': `${spacing.marginLR}mm`,
       '--resume-margin-tb': `${spacing.marginTB}mm`,
       '--resume-entry-spacing': `${spacing.entrySpacing}px`,
-      '--resume-accent-color': colors.accent,
-      '--resume-text-color': colors.text,
       '--resume-font-family': typography.fontFamily,
+      '--resume-name-font-family': nameFf,
       '--resume-heading-size': typography.headings.size === 's' ? '0.9rem' : typography.headings.size === 'm' ? '1.1rem' : typography.headings.size === 'l' ? '1.3rem' : '1.5rem',
       '--resume-name-size': personalDetails.nameSize === 'xs' ? '1.5rem' : personalDetails.nameSize === 's' ? '2rem' : personalDetails.nameSize === 'm' ? '2.5rem' : personalDetails.nameSize === 'l' ? '3rem' : '3.5rem',
       '--resume-name-font-weight': personalDetails.nameBold ? '800' : '400',
@@ -128,8 +135,6 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
     return design.languageRegion.pageFormat === 'A4'
       ? { width: 794, height: 1123, name: 'A4' } // 210mm x 297mm at 96 DPI
       : { width: 816, height: 1056, name: 'Letter' }; // 8.5in x 11in at 96 DPI
-    // Note: We use pixels for internal calculation relative to 96dpi usually, 
-    // but styling uses mm. ResizeObserver returns pixels.
   }, [design.languageRegion.pageFormat]);
 
   // --- PDF Generation Logic (Asynchronous) ---
@@ -274,9 +279,48 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
   const leftPct = design.layout.columnWidths.left;
   const rightPct = design.layout.columnWidths.right;
 
+  const sidebarColumnShellStyle = useMemo((): React.CSSProperties | undefined => {
+    const bg = design.colors.sidebarBackground;
+    const bl = design.advanced?.sidebarBorderLeft;
+    if (!bg && !bl) return undefined;
+    return {
+      boxSizing: 'border-box',
+      ...(bg ? { backgroundColor: bg } : {}),
+      ...(bl ? { borderLeft: bl } : {}),
+      padding: bg || bl ? '8px 8px' : undefined,
+      borderRadius: bg ? '0 6px 6px 0' : undefined,
+    };
+  }, [design.colors.sidebarBackground, design.advanced?.sidebarBorderLeft]);
+
+  /** Percent + gap can exceed 100% and collapse columns; fr splits space after gap */
+  const twoColumnGridTemplate = useMemo(
+    () => `minmax(0,${leftPct}fr) minmax(0,${rightPct}fr)`,
+    [leftPct, rightPct]
+  );
+
   // --- Render Block Helper ---
   const renderBlock = (block: ResumeBlock, isFirstOnPage: boolean = false) => {
     const { sectionSettings } = design;
+    const el = design.entryLayout ?? DEFAULT_DESIGN.entryLayout;
+    const entryTitleFs =
+      el.titleSize === 's'
+        ? 'calc(var(--resume-font-size) - 0.5pt)'
+        : el.titleSize === 'l'
+          ? 'calc(var(--resume-font-size) + 1pt)'
+          : 'var(--resume-font-size)';
+    const listBulletChar = el.listStyle === 'hyphen' ? '–' : '●';
+    const bodyIndentClass = el.indentBody ? 'ml-4 pl-1' : '';
+    const subPlacement = el.subtitlePlacement ?? 'next-line';
+    const dateColStyle: React.CSSProperties =
+      el.dateColumnMode === 'manual'
+        ? { minWidth: '7.75rem', flexShrink: 0, textAlign: 'right' }
+        : { flexShrink: 0 };
+    const subTitleClass = cn(
+      'leading-tight',
+      el.subtitleStyle === 'italic' && 'italic',
+      el.subtitleStyle === 'bold' && 'font-bold',
+      el.subtitleStyle === 'normal' && 'font-medium'
+    );
 
     // Helper for icons
     const renderSectionIcon = (icon: React.ReactNode) => {
@@ -290,10 +334,11 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         <span className={cn(
           "p-1 rounded flex items-center justify-center mr-2",
           isFilled ? "text-white" : "border",
-        )} style={{
-          backgroundColor: isFilled ? design.colors.accent : 'transparent',
-          borderColor: isOutline ? design.colors.accent : 'transparent',
-          color: isFilled ? 'white' : design.colors.accent,
+        )}
+        style={{
+          backgroundColor: isFilled ? 'var(--resume-header-icon-color)' : 'transparent',
+          borderColor: isOutline ? 'var(--resume-header-icon-color)' : 'transparent',
+          color: isFilled ? 'white' : 'var(--resume-header-icon-color)',
           width: '1.5em', height: '1.5em'
         }}>
           {React.cloneElement(icon as React.ReactElement<any>, { className: "w-3 h-3" })}
@@ -301,28 +346,43 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
       );
     };
 
-    const SectionTitle = ({ children, icon }: { children: React.ReactNode, icon?: React.ReactNode }) => (
-      <h2 className={cn(
-        "font-bold uppercase tracking-widest border-b pb-1 mb-3 transition-colors flex items-center group",
-        !isFirstOnPage ? "mt-4" : "mt-0",
-        design.typography.headings.capitalization === 'none' && "normal-case",
-        design.typography.headings.capitalization === 'capitalize' && "capitalize",
-        design.typography.headings.capitalization === 'uppercase' && "uppercase"
-      )}
-        style={{
-          color: design.colors.accent,
-          borderColor: `${design.colors.accent}40`,
-        }}>
-        {icon && renderSectionIcon(icon)}
-        <span className="flex-1">
-          {typeof children === 'string' ? (
-            <span dangerouslySetInnerHTML={{ __html: decodeHtml(children) }} />
-          ) : (
-            children
+    const SectionTitle = ({ children, icon }: { children: React.ReactNode, icon?: React.ReactNode }) => {
+      const hs = design.typography.headings.style || 'classic';
+      const cap = design.typography.headings.capitalization;
+      const headingColor = 'var(--resume-heading-color)';
+      return (
+        <h2
+          className={cn(
+            'mb-3 flex items-center group transition-colors',
+            !isFirstOnPage ? 'mt-4' : 'mt-0',
+            cap === 'none' && 'normal-case',
+            cap === 'capitalize' && 'capitalize',
+            cap === 'uppercase' && 'uppercase',
+            hs === 'classic' && 'font-bold uppercase tracking-widest border-b pb-1',
+            hs === 'underline' && 'font-bold uppercase tracking-widest border-b-2 pb-1',
+            hs === 'minimal' && 'border-0 pb-0 text-base font-semibold tracking-tight',
+            hs === 'pill' && 'border-0 w-fit max-w-full rounded-full px-4 py-1.5 text-sm font-bold tracking-wide',
+            hs === 'bold' && 'border-0 pb-0 text-lg font-black tracking-wide uppercase',
           )}
-        </span>
-      </h2>
-    );
+          style={{
+            color: headingColor,
+            borderColor: hs === 'classic' || hs === 'underline' ? `${design.colors.accent}55` : 'transparent',
+            ...(hs === 'pill'
+              ? { backgroundColor: `color-mix(in srgb, ${design.colors.accent} 14%, transparent)` }
+              : {}),
+          }}
+        >
+          {icon && renderSectionIcon(icon)}
+          <span className="flex-1 min-w-0">
+            {typeof children === 'string' ? (
+              <span dangerouslySetInnerHTML={{ __html: decodeHtml(children) }} />
+            ) : (
+              children
+            )}
+          </span>
+        </h2>
+      );
+    };
 
     const BannerSectionTitle = ({ children, icon }: { children: React.ReactNode, icon?: React.ReactNode }) => {
       const isEliteNavy = design.templateId === 'elite-navy';
@@ -359,8 +419,12 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
     };
 
     switch (block.type) {
+      case 'page-break':
+        /** Zero-height marker; pagination hook flushes the page before the next block. */
+        return <div className="h-0 w-full overflow-hidden" aria-hidden />;
+
       case 'header':
-        return <PersonalInfoModule data={data} design={design} isSaved={isSaved} />;
+        return <PersonalInfoModule data={data} design={design} thumbnailMode={thumbnailMode} />;
 
       case 'section-title':
         let icon: React.ReactNode = null;
@@ -390,7 +454,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         if (block.sectionId === 'summary') {
           return (
             <div
-              className="text-justify relative pl-0 prose prose-slate max-w-none [&_p]:m-0"
+              className={cn('text-justify relative prose prose-slate max-w-none [&_p]:m-0', bodyIndentClass)}
               style={{
                 fontSize: 'var(--resume-font-size)',
                 lineHeight: 'var(--resume-line-height)',
@@ -417,8 +481,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                   marginTop: 0
                 }}
               >
-                <div className="flex items-start">
-                  <div className="w-4 flex justify-center shrink-0 opacity-70 relative top-[0.3em] text-[10px]">●</div>
+                <div className={cn('flex items-start', bodyIndentClass)}>
+                  <div className="w-4 flex justify-center shrink-0 relative top-[0.3em] text-[10px]" style={{ color: 'var(--resume-dots-color)' }}>{listBulletChar}</div>
                   <div
                     className="prose prose-slate max-w-none [&_p]:m-0"
                     style={{ fontSize: 'var(--resume-font-size)', flex: 1, lineHeight: 'var(--resume-line-height)', color: '#1e293b' }}
@@ -441,7 +505,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
               >
                 {exp.description && (
                   <div
-                    className="prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:m-0"
+                    className={cn('prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:m-0', bodyIndentClass)}
                     style={{ fontSize: 'calc(var(--resume-font-size) - 1pt)', lineHeight: 1.4 }}
                     dangerouslySetInnerHTML={{ __html: decodeHtml(exp.description) }}
                   />
@@ -450,21 +514,39 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
             );
           }
 
+          const primaryTitle = order === 'title-employer' ? exp.position : exp.company;
+          const secondaryTitle = order === 'title-employer' ? exp.company : exp.position;
+
           // Header or Full Block
           return (
             <div className="resume-item" style={{ marginBottom: renderType === 'header' ? '1px' : 'calc(var(--resume-entry-spacing) * 0.15)' }}>
-              <div className="flex justify-between items-baseline mb-0.5">
-                <div className="flex flex-col flex-1 gap-0.5">
-                  <h3 className="font-bold tracking-tight text-slate-900" style={{ fontSize: 'var(--resume-font-size)', lineHeight: 1.3 }}>
-                    <span dangerouslySetInnerHTML={{ __html: decodeHtml(order === 'title-employer' ? exp.position : exp.company) }} />
-                  </h3>
-                  <div className="font-bold leading-tight flex items-center gap-2"
-                    style={{ color: design.colors.accent, fontSize: 'var(--resume-font-size)' }}>
-                    <span dangerouslySetInnerHTML={{ __html: decodeHtml(order === 'title-employer' ? exp.company : exp.position) }} />
-                  </div>
+              <div className="flex justify-between items-start gap-3 mb-0.5">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <h3 className="font-bold tracking-tight text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }}>
+                        <span dangerouslySetInnerHTML={{ __html: decodeHtml(primaryTitle) }} />
+                      </h3>
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <div className={cn(subTitleClass, 'flex items-center gap-2')} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }}>
+                        <span dangerouslySetInnerHTML={{ __html: decodeHtml(secondaryTitle) }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <h3 className="font-bold tracking-tight text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }}>
+                        <span dangerouslySetInnerHTML={{ __html: decodeHtml(primaryTitle) }} />
+                      </h3>
+                      <div className={cn(subTitleClass, 'flex items-center gap-2')} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }}>
+                        <span dangerouslySetInnerHTML={{ __html: decodeHtml(secondaryTitle) }} />
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
-                  <span className="font-bold text-slate-600 uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)' }}>
+                <div className="flex shrink-0 flex-col items-end gap-0.5 text-right" style={dateColStyle}>
+                  <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
                     {formatDate(exp.startDate)} – {exp.current ? 'Present' : formatDate(exp.endDate)}
                   </span>
                   {exp.location && (
@@ -476,7 +558,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
               {/* Render description here ONLY if type is undefined (legacy behavior) */}
               {!renderType && exp.description && (
                 <div
-                  className="mt-3 prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:leading-[1.6]"
+                  className={cn('mt-3 prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:leading-[1.6]', bodyIndentClass)}
                   style={{ fontSize: 'calc(var(--resume-font-size) - 0.5pt)', color: '#1e293b' }}
                   dangerouslySetInnerHTML={{ __html: decodeHtml(exp.description) }}
                 />
@@ -486,25 +568,52 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         }
         if (block.sectionId === 'education') {
           const edu = block.content;
+          const eduOrder = sectionSettings.education.order;
+          const degreeLine = (
+            <>
+              {edu.degree && edu.field && (
+                <span className="italic">
+                  <span dangerouslySetInnerHTML={{ __html: decodeHtml(edu.degree) }} /> in{' '}
+                  <span dangerouslySetInnerHTML={{ __html: decodeHtml(edu.field) }} />
+                </span>
+              )}
+              {edu.degree && !edu.field && <span className="italic" dangerouslySetInnerHTML={{ __html: decodeHtml(edu.degree) }} />}
+              {!edu.degree && edu.field && <span className="italic" dangerouslySetInnerHTML={{ __html: decodeHtml(edu.field) }} />}
+            </>
+          );
+          const schoolLine = <span dangerouslySetInnerHTML={{ __html: decodeHtml(edu.institution) }} />;
+          const primaryNode = eduOrder === 'degree-school' ? degreeLine : schoolLine;
+          const secondaryNode = eduOrder === 'degree-school' ? schoolLine : degreeLine;
+
           return (
             <div className="resume-item" style={{ marginBottom: 'calc(var(--resume-entry-spacing) * 0.15)' }}>
-              <div className="flex justify-between items-baseline mb-0.5">
-                <div className="flex flex-col flex-1 gap-0.5">
-                  <h3 className="font-bold text-slate-900" style={{ fontSize: 'var(--resume-font-size)', lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(edu.institution) }} />
-                  <div className="font-bold leading-tight" style={{ color: design.colors.accent, fontSize: 'var(--resume-font-size)' }}>
-                    {edu.degree && edu.field && (
-                      <span className="italic"><span dangerouslySetInnerHTML={{ __html: decodeHtml(edu.degree) }} /> in <span dangerouslySetInnerHTML={{ __html: decodeHtml(edu.field) }} /></span>
-                    )}
-                    {edu.degree && !edu.field && (
-                      <span className="italic" dangerouslySetInnerHTML={{ __html: decodeHtml(edu.degree) }} />
-                    )}
-                    {!edu.degree && edu.field && (
-                      <span className="italic" dangerouslySetInnerHTML={{ __html: decodeHtml(edu.field) }} />
-                    )}
-                  </div>
+              <div className="flex justify-between items-start gap-3 mb-0.5">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }}>
+                        {primaryNode}
+                      </h3>
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }}>
+                        {secondaryNode}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }}>
+                        {primaryNode}
+                      </h3>
+                      <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }}>
+                        {secondaryNode}
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
-                  <span className="font-bold text-slate-600 uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)' }}>
+                <div className="flex shrink-0 flex-col items-end gap-0.5 text-right" style={dateColStyle}>
+                  <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
                     {edu.startYear || ''} {edu.startYear && edu.endYear ? '–' : ''} {edu.endYear || ''}
                   </span>
                   {edu.gpa && <span className="text-slate-400 font-bold" style={{ fontSize: 'var(--resume-font-size)' }}>GPA: {edu.gpa}</span>}
@@ -526,8 +635,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                   marginTop: 0
                 }}
               >
-                <div className="flex items-start">
-                  <div className="w-4 flex justify-center shrink-0 opacity-70 relative top-[0.3em] text-[10px]">●</div>
+                <div className={cn('flex items-start', bodyIndentClass)}>
+                  <div className="w-4 flex justify-center shrink-0 relative top-[0.3em] text-[10px]" style={{ color: 'var(--resume-dots-color)' }}>{listBulletChar}</div>
                   <div
                     className="prose prose-slate max-w-none [&_p]:m-0"
                     style={{ fontSize: 'var(--resume-font-size)', flex: 1, lineHeight: 'var(--resume-line-height)', color: '#1e293b' }}
@@ -549,7 +658,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
               >
                 {project.description && (
                   <div
-                    className="prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:m-0"
+                    className={cn('prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:m-0', bodyIndentClass)}
                     style={{ fontSize: 'var(--resume-font-size)', lineHeight: 1.5 }}
                     dangerouslySetInnerHTML={{ __html: decodeHtml(project.description) }}
                   />
@@ -560,23 +669,42 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
 
           return (
             <div className="resume-item" style={{ marginBottom: renderType === 'header' ? '1px' : 'calc(var(--resume-entry-spacing) * 0.15)' }}>
-              <div className="flex justify-between items-baseline mb-0.5">
-                <div className="flex flex-col flex-1 gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900" style={{ fontSize: 'var(--resume-font-size)', lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(project.title) }} />
-                    {project.link && (
-                      <a href={project.link} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-[var(--resume-accent-color)] transition-colors">
-                        <ExternalLink size={12} />
-                      </a>
-                    )}
-                  </div>
-                  {project.role && (
-                    <div className="font-semibold italic text-slate-500" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(project.role) }} />
+              <div className="flex justify-between items-start gap-3 mb-0.5">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' && project.role ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(project.title) }} />
+                        {project.link && (
+                          <a href={project.link} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-[var(--resume-accent-color)] transition-colors">
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(project.role) }} />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(project.title) }} />
+                        {project.link && (
+                          <a href={project.link} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-[var(--resume-accent-color)] transition-colors">
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                      {project.role && (
+                        <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(project.role) }} />
+                      )}
+                    </>
                   )}
                 </div>
                 {(project.startDate || project.endDate) && (
-                  <div className="text-right shrink-0">
-                    <span className="font-bold text-slate-400 uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)' }}>
+                  <div className="text-right shrink-0" style={dateColStyle}>
+                    <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
                       {project.startDate ? formatDate(project.startDate) : ''} {project.startDate && project.endDate ? '–' : ''} {project.endDate ? formatDate(project.endDate) : ''}
                     </span>
                   </div>
@@ -585,7 +713,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
 
               {!renderType && project.description && (
                 <div
-                  className="mt-2.5 prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:leading-relaxed"
+                  className={cn('mt-2.5 prose prose-slate max-w-none [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_p]:leading-relaxed', bodyIndentClass)}
                   style={{ fontSize: 'calc(var(--resume-font-size) - 0.5pt)', color: '#1e293b' }}
                   dangerouslySetInnerHTML={{ __html: decodeHtml(project.description) }}
                 />
@@ -595,16 +723,33 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         }
         if (block.sectionId === 'certificates') {
           const cert = block.content;
+          const orgStr = cert.organization ? String(cert.organization).trim() : '';
           return (
             <div className="resume-item break-inside-avoid" style={{ marginBottom: 'calc(var(--resume-entry-spacing) * 0.15)' }}>
-              <div className="flex justify-between items-baseline mb-0.5">
-                <div className="flex flex-col flex-1">
-                  <h3 className="font-bold" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(cert.name) }} />
-                  <span className="opacity-60" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(cert.organization) }} />
+              <div className="flex justify-between items-start gap-3 mb-0.5">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' && orgStr ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(cert.name) }} />
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(orgStr) }} />
+                    </div>
+                  ) : (
+                    <>
+                      <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(cert.name) }} />
+                      {orgStr ? (
+                        <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(orgStr) }} />
+                      ) : null}
+                    </>
+                  )}
                 </div>
-                <span className="font-bold uppercase tracking-tight opacity-60 whitespace-nowrap ml-2" style={{ fontSize: 'var(--resume-font-size)' }}>
-                  {formatDate(cert.issueDate)}
-                </span>
+                <div className="shrink-0 text-right" style={dateColStyle}>
+                  <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
+                    {formatDate(cert.issueDate)}
+                  </span>
+                </div>
               </div>
             </div>
           );
@@ -612,30 +757,72 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
 
         if (block.sectionId === 'awards') {
           const award = block.content;
+          const orgStr = award.organization ? String(award.organization).trim() : '';
           return (
-            <div className="resume-item break-inside-avoid flex justify-between items-baseline mb-2">
-              <div className="flex flex-col">
-                <span className="font-bold" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(award.title) }} />
-                <span className="opacity-60" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(award.organization) }} />
+            <div className="resume-item break-inside-avoid" style={{ marginBottom: 'calc(var(--resume-entry-spacing) * 0.15)' }}>
+              <div className="flex justify-between items-start gap-3 mb-0.5">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' && orgStr ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="font-bold text-slate-900" style={{ fontSize: entryTitleFs }} dangerouslySetInnerHTML={{ __html: decodeHtml(award.title) }} />
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <span className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(orgStr) }} />
+                    </div>
+                  ) : (
+                    <>
+                      <span className="font-bold text-slate-900" style={{ fontSize: entryTitleFs }} dangerouslySetInnerHTML={{ __html: decodeHtml(award.title) }} />
+                      {orgStr ? (
+                        <span className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(orgStr) }} />
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                <div className="shrink-0 text-right" style={dateColStyle}>
+                  <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
+                    {formatDate(award.date)}
+                  </span>
+                </div>
               </div>
-              <span className="font-bold uppercase tracking-tight opacity-60" style={{ fontSize: 'var(--resume-font-size)' }}>{formatDate(award.date)}</span>
             </div>
           );
         }
 
         if (block.sectionId === 'courses') {
           const course = block.content;
+          const providerStr = course.provider ? String(course.provider).trim() : '';
           return (
-            <div className="resume-item break-inside-avoid shadow-sm border border-slate-50 p-3 rounded-xl mb-4 bg-white/50">
-              <div className="flex justify-between items-baseline mb-1">
-                <h3 className="font-bold text-slate-800" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(course.name) }} />
-                <span className="text-[10px] font-bold text-slate-400">{formatDate(course.completionDate)}</span>
+            <div className="resume-item break-inside-avoid" style={{ marginBottom: 'calc(var(--resume-entry-spacing) * 0.2)' }}>
+              <div className="flex justify-between items-start gap-3 mb-1">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' && providerStr ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(course.name) }} />
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(providerStr) }} />
+                    </div>
+                  ) : (
+                    <>
+                      <h3 className="font-bold text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(course.name) }} />
+                      {providerStr ? (
+                        <div className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(providerStr) }} />
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                <div className="shrink-0 text-right" style={dateColStyle}>
+                  <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
+                    {formatDate(course.completionDate)}
+                  </span>
+                </div>
               </div>
-              <div className="text-xs font-semibold text-slate-500 mb-2" dangerouslySetInnerHTML={{ __html: decodeHtml(course.provider) }} />
               {course.description && (
                 <div
-                  className="prose prose-slate max-w-none text-slate-600 leading-relaxed"
-                  style={{ fontSize: 'calc(var(--resume-font-size) - 1pt)' }}
+                  className={cn('prose prose-slate max-w-none text-slate-700 leading-relaxed [&_p]:m-0', bodyIndentClass)}
+                  style={{ fontSize: 'calc(var(--resume-font-size) - 0.5pt)' }}
                   dangerouslySetInnerHTML={{ __html: decodeHtml(course.description) }}
                 />
               )}
@@ -645,27 +832,75 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
 
         if (block.sectionId === 'organisations') {
           const org = block.content;
+          const nameStr = org.name ? String(org.name).trim() : '';
           return (
-            <div className="resume-item break-inside-avoid flex justify-between items-baseline mb-2">
-              <div className="flex flex-col">
-                <span className="font-bold" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(org.role) }} />
-                <span className="opacity-60" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(org.name) }} />
+            <div className="resume-item break-inside-avoid" style={{ marginBottom: 'calc(var(--resume-entry-spacing) * 0.15)' }}>
+              <div className="flex justify-between items-start gap-3 mb-0.5">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' && nameStr ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="font-bold text-slate-900" style={{ fontSize: entryTitleFs }} dangerouslySetInnerHTML={{ __html: decodeHtml(org.role) }} />
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <span className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(nameStr) }} />
+                    </div>
+                  ) : (
+                    <>
+                      <span className="font-bold text-slate-900" style={{ fontSize: entryTitleFs }} dangerouslySetInnerHTML={{ __html: decodeHtml(org.role) }} />
+                      {nameStr ? (
+                        <span className={subTitleClass} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(nameStr) }} />
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                <div className="shrink-0 text-right" style={dateColStyle}>
+                  <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
+                    {formatDate(org.startDate)} – {org.endDate ? formatDate(org.endDate) : 'Present'}
+                  </span>
+                </div>
               </div>
-              <span className="font-bold uppercase tracking-tight opacity-60 whitespace-nowrap" style={{ fontSize: 'var(--resume-font-size)' }}>
-                {formatDate(org.startDate)} – {org.endDate ? formatDate(org.endDate) : 'Present'}
-              </span>
             </div>
           );
         }
         if (block.sectionId === 'publications') {
           const pub = block.content;
+          const titleHtml = `"${pub.title}"`;
+          const pubStr = pub.publisher ? String(pub.publisher).trim() : '';
           return (
-            <div className="resume-item break-inside-avoid shadow-sm border border-slate-50 p-2 rounded mb-2">
-              <div className="flex justify-between items-baseline mb-1">
-                <h3 className="font-bold italic" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(`"${pub.title}"`) }} />
-                <span className="text-[10px] opacity-60">{formatDate(pub.date)}</span>
+            <div className="resume-item break-inside-avoid" style={{ marginBottom: 'calc(var(--resume-entry-spacing) * 0.15)' }}>
+              <div className="flex justify-between items-start gap-3 mb-0.5">
+                <div className="flex flex-1 min-w-0 flex-col gap-0.5">
+                  {subPlacement === 'same-line' && pubStr ? (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <h3 className="font-bold italic text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(titleHtml) }} />
+                      <span className="text-slate-300 select-none" aria-hidden>
+                        ·
+                      </span>
+                      <div className={cn(subTitleClass, 'italic')} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'calc(var(--resume-font-size) - 0.5pt)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(pubStr) }} />
+                    </div>
+                  ) : (
+                    <>
+                      <h3 className="font-bold italic text-slate-900" style={{ fontSize: entryTitleFs, lineHeight: 1.3 }} dangerouslySetInnerHTML={{ __html: decodeHtml(titleHtml) }} />
+                      {pubStr ? (
+                        <div className={cn(subTitleClass, 'italic')} style={{ color: 'var(--resume-entry-accent-color)', fontSize: 'calc(var(--resume-font-size) - 0.5pt)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(pubStr) }} />
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                <div className="shrink-0 text-right" style={dateColStyle}>
+                  <span className="font-bold uppercase tracking-tight" style={{ fontSize: 'var(--resume-font-size)', color: 'var(--resume-date-color)' }}>
+                    {formatDate(pub.date)}
+                  </span>
+                </div>
               </div>
-              <div className="text-xs opacity-80" dangerouslySetInnerHTML={{ __html: decodeHtml(pub.publisher) }} />
+              {pub.description && (
+                <div
+                  className={cn('mt-1 prose prose-slate max-w-none text-slate-700 [&_p]:m-0', bodyIndentClass)}
+                  style={{ fontSize: 'calc(var(--resume-font-size) - 0.5pt)' }}
+                  dangerouslySetInnerHTML={{ __html: decodeHtml(pub.description) }}
+                />
+              )}
             </div>
           );
         }
@@ -674,7 +909,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         if (block.sectionId === 'custom') {
           return (
             <div
-              className="text-justify prose prose-slate max-w-none"
+              className={cn('text-justify prose prose-slate max-w-none', bodyIndentClass)}
               style={{ fontSize: 'var(--resume-font-size)' }}
               dangerouslySetInnerHTML={{ __html: decodeHtml(block.content) }}
             />
@@ -688,22 +923,6 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         if (block.sectionId === 'skills' || block.sectionId === 'softSkills') {
           const skills = block.content;
           const style = sectionSettings.skills;
-
-          // Special layout for soft skills in jaganraj template
-          if (block.sectionId === 'softSkills' && design.templateId === 'jaganraj') {
-            return (
-              <div className="grid grid-cols-2 gap-x-12 gap-y-4 mb-6">
-                {skills.map((skill: any, i: number) => (
-                  <div key={i} className="flex flex-col">
-                    <span
-                      className="font-bold text-[11px] leading-relaxed relative italic opacity-90"
-                      dangerouslySetInnerHTML={{ __html: decodeHtml(skill.name) }}
-                    />
-                  </div>
-                ))}
-              </div>
-            );
-          }
 
           if (style === 'grid') {
             return (
@@ -749,7 +968,9 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
             <div className="flex flex-wrap gap-x-5 gap-y-2.5 mb-1.5">
               {skills.map((skill: any, i: number) => (
                 <div key={i} className="flex items-center gap-2 bg-slate-50/50 px-2 py-1 rounded border border-slate-100/50 transition-colors hover:bg-slate-100/50">
-                  <div className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: design.colors.accent, opacity: 0.6 }} />
+                  <span className="w-4 flex justify-center shrink-0 text-[10px] leading-none" style={{ color: 'var(--resume-dots-color)' }}>
+                    {listBulletChar}
+                  </span>
                   <span
                     className="font-semibold text-slate-700 leading-tight tracking-tight"
                     style={{ fontSize: 'var(--resume-font-size)' }}
@@ -784,7 +1005,12 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                 {interestsList.map((i: any, idx: number) => (
                   <React.Fragment key={i.id || idx}>
                     <span dangerouslySetInnerHTML={{ __html: decodeHtml(i.name) }} />
-                    {idx < interestsList.length - 1 && <span> • </span>}
+                    {idx < interestsList.length - 1 && (
+                      <span aria-hidden>
+                        {' '}
+                        {listBulletChar}{' '}
+                      </span>
+                    )}
                   </React.Fragment>
                 ))}
               </div>
@@ -793,7 +1019,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                   {interestsList.filter((i: any) => i.description).map((i: any) => (
                     <div
                       key={i.id}
-                      className="text-xs opacity-70 prose prose-slate max-w-none [&_p]:m-0"
+                      className={cn('text-xs opacity-70 prose prose-slate max-w-none [&_p]:m-0', bodyIndentClass)}
                       dangerouslySetInnerHTML={{ __html: decodeHtml(i.description) }}
                     />
                   ))}
@@ -823,7 +1049,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
           return (
             <div className="mb-6 mt-8">
               <div className="border-t pt-4 opacity-70">
-                <div className="italic" style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(dec.statement) }} />
+                <div className={cn('italic', bodyIndentClass)} style={{ fontSize: 'var(--resume-font-size)' }} dangerouslySetInnerHTML={{ __html: decodeHtml(dec.statement) }} />
                 <div className="flex justify-between items-end mt-4">
                   <div>
                     <div className="font-bold uppercase opacity-60" style={{ fontSize: 'var(--resume-font-size)' }}>{dec.place}, {dec.date}</div>
@@ -862,21 +1088,24 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
   const footerBufferPx = 20; // Fixed gap for bottom spacing
   const effectivePaddingBottom = effectiveMarginTB + footerBufferPx + 10; // Safety buffer reduced to 10px
 
+  const paginationOpts = thumbnailMode ? { thumbnail: true as const } : undefined;
+
   const { pages: mainPages, measuring: mainMeasuring, containerRef: mainContainerRef } = useResumePagination(mainBlocks, renderBlock, {
     width: pageDimensions.width,
     height: pageDimensions.height,
     marginTop: effectiveMarginTB,
     marginBottom: effectivePaddingBottom,
-  });
+  }, paginationOpts);
 
   const { pages: sidebarPages, measuring: sidebarMeasuring, containerRef: sidebarContainerRef } = useResumePagination(sidebarBlocks, renderBlock, {
     width: pageDimensions.width,
     height: pageDimensions.height,
     marginTop: effectiveMarginTB,
     marginBottom: effectivePaddingBottom,
-  });
+  }, paginationOpts);
 
-  const measuring = mainMeasuring || (isTwoColumn && sidebarMeasuring);
+  const measuring = thumbnailMode ? false : (mainMeasuring || (isTwoColumn && sidebarMeasuring));
+  const previewReady = (thumbnailMode || mounted) && !measuring;
 
   // Combine pages
   // If one column, sidebarPages is empty (or we ignore it).
@@ -951,15 +1180,25 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
       <div
         ref={previewRef}
         id="resume-preview"
-        className="relative transition-all duration-300 ease-in-out print:p-0 print:m-0 flex flex-col gap-0 p-0 m-0"
-        style={{
-          ...getDesignStyles(),
-        }}
+        className={cn(
+          'relative flex flex-col gap-0 m-0 transition-all duration-300 ease-in-out print:!m-0 print:!bg-transparent print:!p-0',
+          showControls &&
+            'rounded-xl bg-slate-200/80 px-3 py-6 sm:px-5 sm:py-8 dark:bg-slate-800/60'
+        )}
+        style={getDesignStyles()}
       >
-        {!isClient || measuring ? (
-          <div className="flex flex-col items-center justify-center h-[297mm] w-[210mm] bg-white shadow-sm border animate-pulse">
-            <p className="mb-4 text-sm text-slate-400">Formatting Resume...</p>
-            <div className="w-8 h-8 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin" />
+        {!previewReady ? (
+          <div
+            className="mx-auto flex flex-col items-center justify-center border border-slate-200/80 bg-white shadow-sm"
+            style={{
+              width: pageDimensions.width,
+              height: pageDimensions.height,
+              maxWidth: '100%',
+            }}
+          >
+            <p className="text-sm text-slate-500">
+              Formatting resume into {pageDimensions.name} pages…
+            </p>
           </div>
         ) : (
           <>
@@ -970,8 +1209,19 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                   margin: 0 !important;
                   padding: 0 !important;
                 }
+                #resume-preview {
+                  background: transparent !important;
+                  padding: 0 !important;
+                  border-radius: 0 !important;
+                }
                 .flex-col.items-center {
                   display: block !important;
+                }
+                .resume-page-clip {
+                  margin: 0 !important;
+                  margin-bottom: 0 !important;
+                  break-after: page;
+                  page-break-after: always;
                 }
                 .resume-page {
                   margin: 0 !important;
@@ -995,30 +1245,38 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
 
               return (
                 <ResumePage
-                  key={index}
+                  key={`${pageDimensions.name}-${index}-${displayPages.length}`}
                   pageNumber={index + 1}
                   totalNumbers={displayPages.length}
                   scale={zoomLevel}
-                  width="794px"
-                  height="1123px"
+                  width={`${pageDimensions.width}px`}
+                  height={`${pageDimensions.height}px`}
                   style={{
-                    marginBottom: !showControls ? '0' : (zoomLevel < 1 ? `calc(${(zoomLevel - 1) * 1123}px + 2rem)` : '2rem'),
+                    // Clip wrapper is already scaled to visual height; fixed gap between pages
+                    marginBottom: !showControls ? '0' : '1.5rem',
                     boxShadow: !showControls ? 'none' : undefined,
-                    border: !showControls ? 'none' : undefined,
+                    border:
+                      !showControls
+                        ? 'none'
+                        : design.colors.mode === 'border'
+                          ? '2px solid #e2e8f0'
+                          : undefined,
                     marginRight: !showControls ? '0' : undefined,
                     marginLeft: !showControls ? '0' : undefined,
                   }}
                 >
                   {isTwoColumn ? (
                     <div
-                      className="grid w-full gap-x-6 min-h-0"
-                      style={{
-                        gridTemplateColumns: `${leftPct}% ${rightPct}%`
-                      }}
+                      className="grid w-full min-h-0 gap-x-6"
+                      style={{ gridTemplateColumns: twoColumnGridTemplate }}
                     >
-                      <div className="flex flex-col min-w-0">
+                      <div
+                        className="flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden"
+                        style={sidebarFirst ? sidebarColumnShellStyle : undefined}
+                      >
                         {leftContent.map((block, index) => (
                           <div key={block.id} data-id={block.id} className={cn(
+                            'min-w-0 max-w-full',
                             block.type === 'header' ? 'header-container' :
                               (block.content?._renderType && !block.content?._isLastChunk) ? '' : 'section'
                           )}>
@@ -1026,9 +1284,13 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                           </div>
                         ))}
                       </div>
-                      <div className="flex flex-col min-w-0">
+                      <div
+                        className="flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden"
+                        style={!sidebarFirst ? sidebarColumnShellStyle : undefined}
+                      >
                         {rightContent.map((block, index) => (
                           <div key={block.id} data-id={block.id} className={cn(
+                            'min-w-0 max-w-full',
                             block.type === 'header' ? 'header-container' :
                               (block.content?._renderType && !block.content?._isLastChunk) ? '' : 'section'
                           )}>
@@ -1038,7 +1300,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col min-w-0">
+                    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
                       {page.main.map((block, index) => (
                         <div key={block.id} data-id={block.id} className={cn(
                           block.type === 'header' ? 'header-container' :
@@ -1056,7 +1318,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         )}
       </div>
 
-      {/* Hidden Measurement Container - Mirrored Layout for Accurate Measurement */}
+      {/* Hidden measurement: skipped in thumbnailMode (saves a full duplicate DOM tree per preview). */}
+      {!thumbnailMode && (
       <div
         className="fixed top-0 left-[-10000px] pointer-events-none select-none invisible overflow-hidden"
         style={{
@@ -1071,12 +1334,13 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         }}
       >
         {isTwoColumn ? (
-          <div className="grid w-full gap-x-6" style={{ gridTemplateColumns: `${leftPct}% ${rightPct}%` }}>
+          <div className="grid w-full gap-x-6" style={{ gridTemplateColumns: twoColumnGridTemplate }}>
             {sidebarFirst ? (
               <>
-                <div ref={sidebarContainerRef} className="width-constraint">
+                <div ref={sidebarContainerRef} className="min-w-0 max-w-full width-constraint overflow-x-clip" style={sidebarColumnShellStyle}>
                   {sidebarBlocks.map(block => (
                     <div key={block.id} data-id={block.id} className={cn(
+                      'min-w-0 max-w-full',
                       block.type === 'header' ? 'header-container' :
                         (block.content?._renderType && !block.content?._isLastChunk) ? '' : 'section'
                     )}>
@@ -1084,9 +1348,10 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                     </div>
                   ))}
                 </div>
-                <div ref={mainContainerRef} className="width-constraint">
+                <div ref={mainContainerRef} className="min-w-0 max-w-full width-constraint overflow-visible">
                   {mainBlocks.map(block => (
                     <div key={block.id} data-id={block.id} className={cn(
+                      'min-w-0 max-w-full',
                       block.type === 'header' ? 'header-container' :
                         (block.content?._renderType && !block.content?._isLastChunk) ? '' : 'section'
                     )}>
@@ -1097,9 +1362,10 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
               </>
             ) : (
               <>
-                <div ref={mainContainerRef} className="width-constraint">
+                <div ref={mainContainerRef} className="min-w-0 max-w-full width-constraint overflow-visible">
                   {mainBlocks.map(block => (
                     <div key={block.id} data-id={block.id} className={cn(
+                      'min-w-0 max-w-full',
                       block.type === 'header' ? 'header-container' :
                         (block.content?._renderType && !block.content?._isLastChunk) ? '' : 'section'
                     )}>
@@ -1107,9 +1373,10 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
                     </div>
                   ))}
                 </div>
-                <div ref={sidebarContainerRef} className="width-constraint">
+                <div ref={sidebarContainerRef} className="min-w-0 max-w-full width-constraint overflow-x-clip" style={sidebarColumnShellStyle}>
                   {sidebarBlocks.map(block => (
                     <div key={block.id} data-id={block.id} className={cn(
+                      'min-w-0 max-w-full',
                       block.type === 'header' ? 'header-container' :
                         (block.content?._renderType && !block.content?._isLastChunk) ? '' : 'section'
                     )}>
@@ -1137,14 +1404,47 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
           <div ref={sidebarContainerRef} style={{ display: 'none' }} />
         )}
       </div>
+      )}
     </div>
   );
 });
 
 ResumePreview.displayName = 'ResumePreview';
 
+type HeaderContactRow = {
+  key: string;
+  value: string;
+  icon: React.ElementType;
+  isLink?: boolean;
+  label?: string;
+};
+
+function headerContactRows(pi: PersonalInfo): HeaderContactRow[] {
+  return [
+    { key: 'email', value: pi.email, icon: Mail },
+    { key: 'phone', value: pi.phone, icon: Phone },
+    { key: 'location', value: pi.location, icon: MapPin },
+    { key: 'linkedIn', value: pi.linkedIn ?? '', icon: Linkedin, isLink: true, label: 'LinkedIn' },
+    { key: 'github', value: pi.github ?? '', icon: Github, isLink: true, label: 'GitHub' },
+    { key: 'website', value: pi.website ?? '', icon: Globe, isLink: true, label: 'Portfolio' },
+    { key: 'nationality', value: pi.nationality ?? '', icon: Globe, label: 'Nationality' },
+    { key: 'dateOfBirth', value: pi.dateOfBirth ?? '', icon: Calendar, label: 'DOB' },
+    { key: 'visa', value: pi.visa ?? '', icon: Shield, label: 'Visa' },
+    { key: 'passport', value: pi.passport ?? '', icon: Shield, label: 'Passport' },
+    { key: 'gender', value: pi.gender ?? '', icon: User, label: 'Gender' },
+  ].filter((r) => Boolean(r.value && String(r.value).trim()));
+}
+
 // --- Personal Info Component (Reusable) ---
-const PersonalInfoModule = ({ data, design, isSaved }: { data: ResumeData, design: any, isSaved: boolean }) => { // Keeping design:any for now to avoid strict type refactor of design object if needed, but fixing the other any
+const PersonalInfoModule = ({
+  data,
+  design,
+  thumbnailMode = false,
+}: {
+  data: ResumeData;
+  design: any;
+  thumbnailMode?: boolean;
+}) => {
   const { personalInfo, jobTitle } = data;
   const personalDetails = {
     ...design.personalDetails,
@@ -1152,12 +1452,28 @@ const PersonalInfoModule = ({ data, design, isSaved }: { data: ResumeData, desig
   };
   if (!personalInfo.fullName) return null;
 
+  const arrangement = personalDetails.arrangement ?? 'icon';
+  const contactRows = headerContactRows(personalInfo);
+  const contactSep =
+    arrangement === 'bullet' ? '·' : arrangement === 'pipe' ? '｜' : '|';
+
+  /** Full-bleed banner margins are for single-column pages only; in a sidebar they paint over the main column */
+  const isBannerInSidebarColumn =
+    !!personalDetails.banner &&
+    (design.layout?.columns === 'two' || design.layout?.columns === 'mix') &&
+    (design.layout?.headerPosition === 'left' || design.layout?.headerPosition === 'right');
+
+  /** Narrow rail: stack photo + name + contacts vertically so the name uses full column width */
+  const isClassicHeaderInSidebar =
+    !personalDetails.banner &&
+    (design.layout?.columns === 'two' || design.layout?.columns === 'mix') &&
+    (design.layout?.headerPosition === 'left' || design.layout?.headerPosition === 'right');
+
   const iconStyle = personalDetails.iconStyle;
 
   const renderIcon = (IconComponent: React.ElementType) => {
     if (!iconStyle || iconStyle === 'none') return null;
-    const isJaganraj = design.templateId === 'jaganraj' && isSaved;
-    const safeIconStyle = isJaganraj ? 'circle-filled' : String(iconStyle || 'none');
+    const safeIconStyle = String(iconStyle || 'none');
     const isFilled = safeIconStyle.includes('filled');
     const isCircle = safeIconStyle.includes('circle');
     const isRounded = safeIconStyle.includes('rounded');
@@ -1168,11 +1484,11 @@ const PersonalInfoModule = ({ data, design, isSaved }: { data: ResumeData, desig
         "flex items-center justify-center transition-all",
         isFilled ? "text-white" : "",
         isOutline ? "border" : "",
-        (isCircle || isJaganraj) ? "rounded-full" : isRounded ? "rounded-md" : "rounded-none"
+        isCircle ? "rounded-full" : isRounded ? "rounded-md" : "rounded-none"
       )} style={{
-        backgroundColor: (isFilled || isJaganraj) ? design.colors.accent : 'transparent',
-        borderColor: (isOutline && !isJaganraj) ? design.colors.accent : 'transparent',
-        color: (isFilled || isJaganraj) ? 'white' : design.colors.accent,
+        backgroundColor: isFilled ? 'var(--resume-header-icon-color)' : 'transparent',
+        borderColor: isOutline ? 'var(--resume-header-icon-color)' : 'transparent',
+        color: isFilled ? 'white' : 'var(--resume-header-icon-color)',
         padding: '2px'
       }}>
         <IconComponent className="w-3 h-3" />
@@ -1208,16 +1524,28 @@ const PersonalInfoModule = ({ data, design, isSaved }: { data: ResumeData, desig
       {/* Banner Header Style */}
       {personalDetails.banner ? (
         <header className={cn(
-          "mb-4 pb-6 px-10 -mx-10 bg-[var(--resume-accent-color)] text-white flex gap-8 items-center relative overflow-hidden",
+          "mb-4 pb-6 bg-[var(--resume-accent-color)] text-white flex gap-8 items-center relative overflow-hidden",
+          !isBannerInSidebarColumn &&
+            (thumbnailMode ? "w-full min-w-0 box-border" : "px-10 -mx-10"),
+          isBannerInSidebarColumn && "w-full min-w-0 rounded-md px-3 py-4 box-border",
           personalDetails.align === 'center' && "flex-col text-center",
           personalDetails.align === 'right' && "flex-row-reverse text-right"
         )} style={{
-          marginLeft: 'calc(var(--resume-margin-lr) * -1)',
-          marginRight: 'calc(var(--resume-margin-lr) * -1)',
-          paddingLeft: 'var(--resume-margin-lr)',
-          paddingRight: 'var(--resume-margin-lr)',
-          marginTop: 'calc(var(--resume-margin-tb) * -1)',
-          paddingTop: '2.75rem',
+          ...(isBannerInSidebarColumn
+            ? {}
+            : thumbnailMode
+              ? {
+                  paddingLeft: 'var(--resume-margin-lr)',
+                  paddingRight: 'var(--resume-margin-lr)',
+                }
+              : {
+                  marginLeft: 'calc(var(--resume-margin-lr) * -1)',
+                  marginRight: 'calc(var(--resume-margin-lr) * -1)',
+                  paddingLeft: 'var(--resume-margin-lr)',
+                  paddingRight: 'var(--resume-margin-lr)',
+                  marginTop: 'calc(var(--resume-margin-tb) * -1)',
+                }),
+          paddingTop: isBannerInSidebarColumn ? '1rem' : '2.75rem',
         }}>
           {/* Subtle pattern or gradient for premium feel */}
           <div className="absolute inset-0 bg-black/5 pointer-events-none" />
@@ -1236,107 +1564,247 @@ const PersonalInfoModule = ({ data, design, isSaved }: { data: ResumeData, desig
               {personalInfo.fullName}
             </h1>
             {jobTitle && jobTitle.trim() && (
-              <div className={cn(
-                "text-xl font-bold tracking-wider opacity-95 mb-2",
-                (design.templateId === 'jaganraj' && isSaved) ? "mt-1" : ""
-              )}>
+              <div className="text-xl font-bold tracking-wider opacity-95 mb-2">
                 <span dangerouslySetInnerHTML={{ __html: decodeHtml(jobTitle.trim()) }} />
               </div>
             )}
 
-            <div className={cn(
-              "flex flex-wrap gap-x-8 gap-y-3 mt-4",
-              personalDetails.align === 'center' && "justify-center",
-              personalDetails.align === 'right' && "justify-end"
-            )} style={{ fontSize: 'var(--resume-font-size)' }}>
-              {[
-                { value: personalInfo.email, icon: Mail },
-                { value: personalInfo.phone, icon: Phone },
-                { value: personalInfo.location, icon: MapPin },
-                { value: personalInfo.linkedIn, icon: Linkedin, isLink: true, label: 'LinkedIn' },
-                { value: personalInfo.github, icon: Github, isLink: true, label: 'GitHub' },
-                { value: personalInfo.website, icon: Globe, isLink: true, label: 'Portfolio' },
-                { value: personalInfo.nationality, icon: Globe, label: 'Nationality' },
-                { value: personalInfo.dateOfBirth, icon: Calendar, label: 'DOB' },
-                { value: personalInfo.visa, icon: Shield, label: 'Visa' },
-                { value: personalInfo.passport, icon: Shield, label: 'Passport' },
-                { value: personalInfo.gender, icon: User, label: 'Gender' }
-              ].map((item, i) => item.value && (
-                <div key={i} className="flex items-center gap-2 group cursor-default">
-                  <div className="bg-white/20 p-1.5 rounded-full transition-colors group-hover:bg-white/30">
-                    <item.icon size={12} strokeWidth={2.5} className="text-white" />
-                  </div>
-                  {item.isLink ? (
-                    <a href={item.value} target="_blank" rel="noreferrer" className="underline underline-offset-4 decoration-white/30 hover:decoration-white/80 transition-all">
-                      {item.label}
-                    </a>
-                  ) : (
-                    <span className="opacity-90">{item.value}</span>
-                  )}
-                </div>
-              ))}
+            <div
+              className={cn(
+                'mt-4',
+                arrangement === 'icon'
+                  ? cn('flex flex-wrap gap-x-8 gap-y-3', personalDetails.align === 'center' && 'justify-center', personalDetails.align === 'right' && 'justify-end')
+                  : cn(
+                      'flex flex-wrap items-baseline gap-x-1 gap-y-2',
+                      personalDetails.align === 'center' && 'justify-center',
+                      personalDetails.align === 'right' && 'justify-end'
+                    )
+              )}
+              style={{ fontSize: 'var(--resume-font-size)' }}
+            >
+              {arrangement === 'icon'
+                ? contactRows.map((item) => (
+                    <div key={item.key} className="flex items-center gap-2 group cursor-default">
+                      <div className="bg-white/20 p-1.5 rounded-full transition-colors group-hover:bg-white/30">
+                        <item.icon size={12} strokeWidth={2.5} className="text-white" />
+                      </div>
+                      {item.isLink ? (
+                        <a
+                          href={item.value.startsWith('http') ? item.value : `https://${item.value}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline underline-offset-4 decoration-white/30 hover:decoration-white/80 transition-all"
+                        >
+                          {item.label}
+                        </a>
+                      ) : (
+                        <span className="opacity-90">{item.value}</span>
+                      )}
+                    </div>
+                  ))
+                : contactRows.map((item, i) => (
+                    <React.Fragment key={item.key}>
+                      {i > 0 && (
+                        <span className="select-none px-1.5 text-white/45" aria-hidden>
+                          {contactSep}
+                        </span>
+                      )}
+                      {item.isLink ? (
+                        <a
+                          href={item.value.startsWith('http') ? item.value : `https://${item.value}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline underline-offset-4 decoration-white/30 hover:decoration-white/80 transition-all opacity-95"
+                        >
+                          {item.label}
+                        </a>
+                      ) : (
+                        <span className="opacity-90">{item.value}</span>
+                      )}
+                    </React.Fragment>
+                  ))}
             </div>
           </div>
         </header>
       ) : (
-        /* Classic Header Style */
-        <header className={cn(
-          "mb-6 pb-2 flex gap-6 items-start",
-          personalDetails.align === 'center' && "flex-col items-center text-center",
-          personalDetails.align === 'right' && "flex-row-reverse items-start text-right"
-        )}>
+        <header
+          className={cn(
+            'mb-6 pb-2 flex gap-6 items-start',
+            personalDetails.align === 'center' && 'flex-col items-center text-center',
+            personalDetails.align === 'right' && 'flex-row-reverse items-start text-right',
+            isClassicHeaderInSidebar && 'flex-col gap-3'
+          )}
+        >
           {renderPhoto()}
           <div className="flex-1 min-w-0">
-            <h1 className="tracking-tight mb-2" style={{
-              fontSize: 'var(--resume-name-size)',
-              fontWeight: 'var(--resume-name-font-weight)',
-              color: 'var(--resume-text-color)',
-              textTransform: (design.templateId === 'jaganraj' && isSaved) ? 'lowercase' : 'none'
-            }}>
+            <h1
+              className="tracking-tight mb-2"
+              style={{
+                fontSize: 'var(--resume-name-size)',
+                fontWeight: 'var(--resume-name-font-weight)',
+                color: 'var(--resume-name-color)',
+                lineHeight: 1.1,
+              }}
+            >
               {personalInfo.fullName}
             </h1>
             {jobTitle && jobTitle.trim() && (
-              <div className={cn(
-                "text-xl font-semibold tracking-wide flex items-center gap-2",
-                (design.templateId === 'jaganraj' && isSaved) ? "mb-6 mt-2" : "mb-3",
-                personalDetails.align === 'center' && "justify-center",
-                personalDetails.align === 'right' && "justify-end"
-              )} style={{ color: (design.templateId === 'jaganraj' && isSaved) ? design.colors.accent : 'var(--resume-text-color)' }}>
-                <span dangerouslySetInnerHTML={{ __html: decodeHtml(jobTitle.trim()) }} />
-                <div className={cn(
-                  "h-px grow max-w-[200px] bg-current",
-                  (design.templateId === 'jaganraj' && isSaved) ? "opacity-60" : "opacity-20"
-                )} />
+              <div
+                className={cn(
+                  (personalDetails.jobTitlePlacement ?? 'below') === 'same-line'
+                    ? cn(
+                        'mb-3 flex gap-3',
+                        !isClassicHeaderInSidebar && 'items-center',
+                        personalDetails.align === 'center' &&
+                          (personalDetails.jobTitlePlacement ?? 'below') === 'same-line' &&
+                          'justify-center',
+                        personalDetails.align === 'right' &&
+                          (personalDetails.jobTitlePlacement ?? 'below') === 'same-line' &&
+                          'justify-end'
+                      )
+                    : 'mb-3 flex flex-col gap-1',
+                  (personalDetails.jobTitleSize ?? 'm') === 's'
+                    ? isClassicHeaderInSidebar
+                      ? 'text-xs'
+                      : 'text-base'
+                    : (personalDetails.jobTitleSize ?? 'm') === 'l'
+                      ? isClassicHeaderInSidebar
+                        ? 'text-base'
+                        : 'text-2xl'
+                      : isClassicHeaderInSidebar
+                        ? 'text-sm'
+                        : 'text-xl',
+                  personalDetails.align === 'center' &&
+                    (personalDetails.jobTitlePlacement ?? 'below') === 'below' &&
+                    'items-center text-center',
+                  personalDetails.align === 'right' &&
+                    (personalDetails.jobTitlePlacement ?? 'below') === 'below' &&
+                    'items-end text-right'
+                )}
+                style={{
+                  color: 'var(--resume-job-title-color)',
+                  fontStyle: (personalDetails.jobTitleStyle ?? 'normal') === 'italic' ? 'italic' : 'normal',
+                }}
+              >
+                <span
+                  className="min-w-0 shrink break-words"
+                  dangerouslySetInnerHTML={{ __html: decodeHtml(jobTitle.trim()) }}
+                />
+                {!isClassicHeaderInSidebar && (personalDetails.jobTitlePlacement ?? 'below') === 'same-line' && (
+                  <div className="h-px max-w-[200px] grow bg-current opacity-20 min-w-[48px]" />
+                )}
               </div>
             )}
 
-            <div className={cn(
-              "flex flex-wrap gap-x-5 gap-y-2 mt-1",
-              personalDetails.align === 'center' && "justify-center",
-              personalDetails.align === 'right' && "justify-end"
-            )} style={{ color: 'var(--resume-text-color)', opacity: design.advanced?.dateLocationOpacity ?? 0.8, fontSize: 'var(--resume-font-size)' }}>
-              {[
-                { value: personalInfo.email, icon: Mail },
-                { value: personalInfo.phone, icon: Phone },
-                { value: personalInfo.location, icon: MapPin },
-                { value: personalInfo.linkedIn, icon: Linkedin, isLink: true, label: 'LinkedIn' },
-                { value: personalInfo.github, icon: Github, isLink: true, label: 'GitHub' },
-                { value: personalInfo.website, icon: Globe, isLink: true, label: 'Portfolio' },
-                { value: personalInfo.nationality, icon: Globe, label: 'Nationality' },
-                { value: personalInfo.dateOfBirth, icon: Calendar, label: 'DOB' },
-                { value: personalInfo.visa, icon: Shield, label: 'Visa' },
-                { value: personalInfo.passport, icon: Shield, label: 'Passport' },
-                { value: personalInfo.gender, icon: User, label: 'Gender' }
-              ].map((item, i) => item.value && (
-                <div key={i} className="flex items-center gap-1.5 whitespace-nowrap">
-                  {renderIcon(item.icon)}
-                  {item.isLink ? (
-                    <a href={item.value.startsWith('http') ? item.value : `https://${item.value}`} target="_blank" rel="noreferrer" className="underline underline-offset-2 decoration-[var(--resume-accent-color)]/30">{item.label}</a>
-                  ) : (
-                    <span>{item.value}</span>
-                  )}
-                </div>
-              ))}
+            <div
+              className={cn(
+                'mt-1',
+                arrangement === 'icon'
+                  ? isClassicHeaderInSidebar
+                    ? 'flex flex-col gap-y-2'
+                    : cn(
+                        'flex flex-wrap gap-x-5 gap-y-2',
+                        personalDetails.align === 'center' && 'justify-center',
+                        personalDetails.align === 'right' && 'justify-end'
+                      )
+                  : cn(
+                      'flex flex-wrap items-baseline gap-x-1 gap-y-2',
+                      personalDetails.align === 'center' && 'justify-center',
+                      personalDetails.align === 'right' && 'justify-end'
+                    )
+              )}
+              style={{
+                color: 'var(--resume-text-color)',
+                opacity: design.advanced?.dateLocationOpacity ?? 0.8,
+                fontSize: 'var(--resume-font-size)',
+              }}
+            >
+              {arrangement === 'icon'
+                ? contactRows.map((item) => (
+                    <div
+                      key={item.key}
+                      className={cn(
+                        'flex min-w-0 max-w-full items-start gap-1.5',
+                        !isClassicHeaderInSidebar && 'items-center'
+                      )}
+                    >
+                      <span className={cn('shrink-0', isClassicHeaderInSidebar && 'mt-0.5')}>
+                        {renderIcon(item.icon)}
+                      </span>
+                      {item.isLink ? (
+                        <a
+                          href={item.value.startsWith('http') ? item.value : `https://${item.value}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={cn(
+                            'min-w-0',
+                            design.advanced?.linkUnderline !== false && 'underline underline-offset-2',
+                            isClassicHeaderInSidebar ? 'break-all leading-snug' : 'whitespace-nowrap'
+                          )}
+                          style={{
+                            color:
+                              design.advanced?.linkUseAccentBlue === false
+                                ? 'var(--resume-text-color)'
+                                : 'var(--resume-link-color)',
+                            textDecorationColor:
+                              design.advanced?.linkUseAccentBlue === false
+                                ? 'color-mix(in srgb, var(--resume-text-color) 35%, transparent)'
+                                : 'color-mix(in srgb, var(--resume-link-color) 35%, transparent)',
+                          }}
+                        >
+                          {item.label}
+                        </a>
+                      ) : (
+                        <span
+                          className={cn(
+                            'min-w-0 leading-snug',
+                            isClassicHeaderInSidebar ? 'break-words' : 'whitespace-nowrap'
+                          )}
+                        >
+                          {item.value}
+                        </span>
+                      )}
+                    </div>
+                  ))
+                : contactRows.map((item, i) => (
+                    <React.Fragment key={item.key}>
+                      {i > 0 && (
+                        <span
+                          className="select-none px-1 text-slate-400"
+                          style={{ opacity: (design.advanced?.dateLocationOpacity ?? 0.8) * 0.85 }}
+                          aria-hidden
+                        >
+                          {contactSep}
+                        </span>
+                      )}
+                      {item.isLink ? (
+                        <a
+                          href={item.value.startsWith('http') ? item.value : `https://${item.value}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={cn(
+                            'min-w-0',
+                            design.advanced?.linkUnderline !== false && 'underline underline-offset-2',
+                            'break-all leading-snug'
+                          )}
+                          style={{
+                            color:
+                              design.advanced?.linkUseAccentBlue === false
+                                ? 'var(--resume-text-color)'
+                                : 'var(--resume-link-color)',
+                            textDecorationColor:
+                              design.advanced?.linkUseAccentBlue === false
+                                ? 'color-mix(in srgb, var(--resume-text-color) 35%, transparent)'
+                                : 'color-mix(in srgb, var(--resume-link-color) 35%, transparent)',
+                          }}
+                        >
+                          {item.label}
+                        </a>
+                      ) : (
+                        <span className="min-w-0 break-words leading-snug">{item.value}</span>
+                      )}
+                    </React.Fragment>
+                  ))}
             </div>
           </div>
         </header>

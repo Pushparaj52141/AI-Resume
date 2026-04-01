@@ -1,8 +1,7 @@
 import type { ResumeData } from '@/lib/types';
 import { DEFAULT_DESIGN } from '@/lib/defaults';
 
-const makeId = (prefix = '') => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}`;
-
+/** Stable IDs only — random/time-based IDs break SSR/client hydration (e.g. data-id on resume blocks). */
 const atsOptimizedResume: ResumeData = {
   personalInfo: {
     fullName: 'Pushparaj E',
@@ -17,7 +16,7 @@ const atsOptimizedResume: ResumeData = {
   },
   experience: [
     {
-      id: makeId('exp_'),
+      id: 'exp_ats_urbancode',
       company: 'Urbancode',
       position: 'Fullstack Developer',
       startDate: '2024-06',
@@ -32,7 +31,7 @@ const atsOptimizedResume: ResumeData = {
       ]
     },
     {
-      id: makeId('exp_'),
+      id: 'exp_ats_lssc',
       company: 'Leather Sector Skill Council (LSSC)',
       position: 'Backend Developer (Intern)',
       startDate: '2023-01',
@@ -48,7 +47,7 @@ const atsOptimizedResume: ResumeData = {
   ],
   education: [
     {
-      id: makeId('edu_'),
+      id: 'edu_ats_kec',
       institution: 'Kings Engineering College',
       degree: 'B.E., Computer Science & Engineering',
       field: 'Computer Science',
@@ -58,18 +57,18 @@ const atsOptimizedResume: ResumeData = {
     }
   ],
   skills: [
-    { id: makeId('skill_'), name: 'JavaScript', level: 'advanced' },
-    { id: makeId('skill_'), name: 'TypeScript', level: 'intermediate' },
-    { id: makeId('skill_'), name: 'Node.js', level: 'advanced' },
-    { id: makeId('skill_'), name: 'React', level: 'advanced' },
-    { id: makeId('skill_'), name: 'Express', level: 'advanced' },
-    { id: makeId('skill_'), name: 'PostgreSQL', level: 'intermediate' },
-    { id: makeId('skill_'), name: 'MongoDB', level: 'intermediate' },
-    { id: makeId('skill_'), name: 'Firebase', level: 'intermediate' },
-    { id: makeId('skill_'), name: 'REST API', level: 'advanced' },
-    { id: makeId('skill_'), name: 'Git', level: 'advanced' },
-    { id: makeId('skill_'), name: 'Redux Toolkit', level: 'intermediate' },
-    { id: makeId('skill_'), name: 'Adobe Premiere Pro', level: 'intermediate' }
+    { id: 'skill_ats_javascript', name: 'JavaScript', level: 'advanced' },
+    { id: 'skill_ats_typescript', name: 'TypeScript', level: 'intermediate' },
+    { id: 'skill_ats_node', name: 'Node.js', level: 'advanced' },
+    { id: 'skill_ats_react', name: 'React', level: 'advanced' },
+    { id: 'skill_ats_express', name: 'Express', level: 'advanced' },
+    { id: 'skill_ats_postgres', name: 'PostgreSQL', level: 'intermediate' },
+    { id: 'skill_ats_mongo', name: 'MongoDB', level: 'intermediate' },
+    { id: 'skill_ats_firebase', name: 'Firebase', level: 'intermediate' },
+    { id: 'skill_ats_rest', name: 'REST API', level: 'advanced' },
+    { id: 'skill_ats_git', name: 'Git', level: 'advanced' },
+    { id: 'skill_ats_redux', name: 'Redux Toolkit', level: 'intermediate' },
+    { id: 'skill_ats_premiere', name: 'Adobe Premiere Pro', level: 'intermediate' }
   ],
   jobTitle: 'Fullstack Developer',
   jobDescription: '',

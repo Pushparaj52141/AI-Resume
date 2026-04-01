@@ -5,6 +5,17 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  /**
+   * Avoid webpack filesystem pack cache in dev (`.next/cache/webpack/.../*.pack.gz`).
+   * On Windows, those files are often missing or locked (AV, manual `.next` deletes while dev runs),
+   * which causes ENOENT / PackFileCacheStrategy unhandled rejections. Slightly slower rebuilds, stable dev.
+   */
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.cache = false;
+    }
+    return config;
+  },
   async headers() {
     return [
       {

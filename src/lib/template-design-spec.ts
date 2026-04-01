@@ -55,14 +55,86 @@ export const COLOR_PALETTES: Record<string, ColorPalette> = {
     text: '#0f172a',
     background: '#ffffff',
   },
-  jaganrajBlue: {
-    accent: '#3b82f6',
-    text: '#1f2937',
-    background: '#ffffff',
-  },
   eliteNavy: {
     accent: '#1e3a8a', // Deep Navy Blue
     text: '#1f2937',
+    background: '#ffffff',
+  },
+  /** FlowCV-inspired gallery */
+  trueBlue: {
+    accent: '#2563eb',
+    text: '#1f2937',
+    background: '#ffffff',
+  },
+  silver: {
+    accent: '#94a3b8',
+    text: '#334155',
+    background: '#ffffff',
+  },
+  cornerstone: {
+    accent: '#334155',
+    text: '#0f172a',
+    background: '#ffffff',
+  },
+  obsidian: {
+    accent: '#111111',
+    text: '#111827',
+    background: '#ffffff',
+  },
+  leavesGreen: {
+    accent: '#15803d',
+    text: '#14532d',
+    background: '#ffffff',
+  },
+  cobalt: {
+    accent: '#1d4ed8',
+    text: '#1e293b',
+    background: '#ffffff',
+  },
+  harvardCrimson: {
+    accent: '#1e3a5f',
+    text: '#1f2937',
+    background: '#ffffff',
+  },
+  sage: {
+    accent: '#059669',
+    text: '#065f46',
+    background: '#ffffff',
+  },
+  /** Second FlowCV-inspired batch */
+  blueSteel: {
+    accent: '#0284c7',
+    text: '#0f172a',
+    background: '#ffffff',
+  },
+  banking: {
+    accent: '#475569',
+    text: '#1e293b',
+    background: '#ffffff',
+  },
+  simplyBlue: {
+    accent: '#2563eb',
+    text: '#334155',
+    background: '#ffffff',
+  },
+  petrolBlue: {
+    accent: '#0c4a6e',
+    text: '#0f172a',
+    background: '#ffffff',
+  },
+  evergreenSlate: {
+    accent: '#334155',
+    text: '#1e293b',
+    background: '#ffffff',
+  },
+  designerPurple: {
+    accent: '#6b21a8',
+    text: '#1f2937',
+    background: '#ffffff',
+  },
+  monochrome: {
+    accent: '#000000',
+    text: '#262626',
     background: '#ffffff',
   },
 };
@@ -95,6 +167,17 @@ export const LAYOUT_PRESETS: Record<string, LayoutPreset> = {
     columns: 'mix',
     headerPosition: 'left',
     columnWidths: { left: 40, right: 60 },
+  },
+  twoColumnNarrowLeft: {
+    columns: 'two',
+    headerPosition: 'left',
+    columnWidths: { left: 32, right: 68 },
+  },
+  /** Wider main column for petrol / banking-style splits */
+  twoColumnPetrolLeft: {
+    columns: 'two',
+    headerPosition: 'left',
+    columnWidths: { left: 30, right: 70 },
   },
 };
 
@@ -157,49 +240,8 @@ export interface TemplateSpec {
   overrides?: DeepPartial<ResumeDesign>;
 }
 
+/** Add new entries here to grow the gallery (see TEMPLATE_SPECS shape). */
 export const TEMPLATE_SPECS: TemplateSpec[] = [
-  {
-    id: 'jaganraj',
-    name: 'jaganraj',
-    description: 'Professional blue design with modern typography and spacious layout',
-    persona: 'modern',
-    layoutPreset: 'oneColumnTop',
-    colorPalette: 'jaganrajBlue',
-    typographyPreset: 'interUppercase',
-    overrides: {
-      spacing: {
-        entrySpacing: 12,
-        marginTB: 24,
-      },
-      personalDetails: {
-        align: 'left',
-        arrangement: 'icon',
-        iconStyle: 'circle-filled',
-        nameSize: 'xl',
-        nameBold: true,
-      },
-      advanced: {
-        dateLocationOpacity: 0.8,
-      },
-      typography: {
-        headings: {
-          style: 'classic',
-          capitalization: 'uppercase',
-          size: 'm',
-          icons: 'none'
-        }
-      },
-      sectionSettings: {
-        skills: 'grid',
-        workExperience: {
-          order: 'title-employer',
-        },
-        education: {
-          order: 'school-degree',
-        }
-      }
-    },
-  },
   {
     id: 'classic',
     name: 'Classic',
@@ -359,6 +401,430 @@ export const TEMPLATE_SPECS: TemplateSpec[] = [
       sectionSettings: {
         skills: 'compact',
       }
+    },
+  },
+  {
+    id: 'true-blue',
+    name: 'True Blue',
+    description: 'Crisp blue accents on a clean white canvas — classic single-column flow',
+    persona: 'modern',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'trueBlue',
+    typographyPreset: 'interUppercase',
+    overrides: {
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'circle-outline',
+      },
+      spacing: {
+        entrySpacing: 12,
+        marginTB: 22,
+      },
+    },
+  },
+  {
+    id: 'silver',
+    name: 'Silver',
+    description: 'Cool gray highlights and generous whitespace for a polished, understated look',
+    persona: 'modern',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'silver',
+    typographyPreset: 'latoNone',
+    overrides: {
+      personalDetails: {
+        align: 'left',
+        arrangement: 'pipe',
+        iconStyle: 'none',
+      },
+      spacing: {
+        entrySpacing: 14,
+        marginTB: 24,
+      },
+    },
+  },
+  {
+    id: 'executive-suite',
+    name: 'Executive Suite',
+    description: 'Structured corporate layout with a strong hierarchy — boardroom-ready',
+    persona: 'corporate',
+    layoutPreset: 'twoColumnRight',
+    colorPalette: 'cornerstone',
+    typographyPreset: 'robotoUppercase',
+    overrides: {
+      layout: {
+        columnWidths: { left: 62, right: 38 },
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'bar',
+        iconStyle: 'square-filled',
+      },
+      sectionSettings: {
+        skills: 'compact',
+      },
+    },
+  },
+  {
+    id: 'obsidian-edge',
+    name: 'Obsidian Edge',
+    description: 'Bold black header band with inverted type — high-contrast and memorable',
+    persona: 'corporate',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'obsidian',
+    typographyPreset: 'interBannerUppercase',
+    overrides: {
+      colors: {
+        accent: '#111111',
+      },
+      personalDetails: {
+        align: 'left',
+        banner: true,
+        nameSize: 'xl',
+        nameBold: true,
+      },
+      spacing: {
+        entrySpacing: 14,
+        marginTB: 22,
+      },
+    },
+  },
+  {
+    id: 'leaves',
+    name: 'Leaves',
+    description: 'Nature-inspired green accent strip and soft sidebar — creative yet readable',
+    persona: 'creative',
+    layoutPreset: 'twoColumnNarrowLeft',
+    colorPalette: 'leavesGreen',
+    typographyPreset: 'poppinsCapitalize',
+    overrides: {
+      colors: {
+        sidebarBackground: '#f0fdf4',
+      },
+      advanced: {
+        sidebarBorderLeft: '6px solid #15803d',
+      },
+      layout: {
+        columnWidths: { left: 36, right: 64 },
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'circle-filled',
+        showPhoto: true,
+        photoFormat: 'circle',
+        photoSize: 88,
+        nameSize: 'm',
+      },
+      sectionSettings: {
+        skills: 'compact',
+      },
+    },
+  },
+  {
+    id: 'cobalt-edge',
+    name: 'Cobalt Edge',
+    description: 'Deep cobalt banner with room for a photo — confident and contemporary',
+    persona: 'corporate',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'cobalt',
+    typographyPreset: 'interBannerUppercase',
+    overrides: {
+      colors: {
+        accent: '#1d4ed8',
+      },
+      personalDetails: {
+        align: 'left',
+        banner: true,
+        showPhoto: true,
+        photoFormat: 'circle',
+        photoSize: 100,
+        nameSize: 'xl',
+        nameBold: true,
+      },
+      spacing: {
+        entrySpacing: 14,
+        marginTB: 24,
+      },
+      sectionSettings: {
+        skills: 'compact',
+      },
+    },
+  },
+  {
+    id: 'harvard',
+    name: 'Harvard',
+    description: 'Academic serif styling with restrained color — formal research and education',
+    persona: 'corporate',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'harvardCrimson',
+    typographyPreset: 'ebGaramondCapitalizeL',
+    overrides: {
+      personalDetails: {
+        align: 'left',
+        arrangement: 'pipe',
+        iconStyle: 'none',
+        nameSize: 'xl',
+      },
+      entryLayout: {
+        titleSize: 'm',
+        subtitleStyle: 'bold',
+        subtitlePlacement: 'next-line',
+        listStyle: 'hyphen',
+      },
+    },
+  },
+  {
+    id: 'sage-green',
+    name: 'Sage Green',
+    description: 'Soft sage sidebar for contact and skills, white body for experience',
+    persona: 'modern',
+    layoutPreset: 'twoColumnLeft',
+    colorPalette: 'sage',
+    typographyPreset: 'poppinsCapitalize',
+    overrides: {
+      colors: {
+        accent: '#059669',
+        sidebarBackground: '#ecfdf5',
+      },
+      layout: {
+        columnWidths: { left: 38, right: 62 },
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'circle-outline',
+        nameSize: 'm',
+      },
+      sectionSettings: {
+        skills: 'compact',
+      },
+    },
+  },
+  {
+    id: 'blue-steel',
+    name: 'Blue Steel',
+    description: 'Two-column layout with a cool sky sidebar, photo, and star-style skills',
+    persona: 'modern',
+    layoutPreset: 'twoColumnLeft',
+    colorPalette: 'blueSteel',
+    typographyPreset: 'poppinsCapitalize',
+    overrides: {
+      colors: {
+        sidebarBackground: '#e0f2fe',
+      },
+      layout: {
+        columnWidths: { left: 36, right: 64 },
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'circle-filled',
+        showPhoto: true,
+        photoFormat: 'circle',
+        photoSize: 92,
+      },
+      sectionSettings: {
+        skills: 'level',
+        languages: 'grid',
+      },
+    },
+  },
+  {
+    id: 'banking',
+    name: 'Banking',
+    description: 'Centered, line-driven single column — conservative and interview-safe',
+    persona: 'corporate',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'banking',
+    typographyPreset: 'interUppercase',
+    overrides: {
+      personalDetails: {
+        align: 'center',
+        arrangement: 'pipe',
+        iconStyle: 'none',
+      },
+      spacing: {
+        entrySpacing: 10,
+        marginTB: 22,
+        lineHeight: 1.35,
+      },
+      sectionSettings: {
+        skills: 'compact',
+      },
+    },
+  },
+  {
+    id: 'simply-blue',
+    name: 'Simply Blue',
+    description: 'Name in confident blue with airy spacing and clear section rhythm',
+    persona: 'modern',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'simplyBlue',
+    typographyPreset: 'poppinsCapitalize',
+    overrides: {
+      colors: {
+        customColors: {
+          name: '#2563eb',
+        },
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'circle-outline',
+      },
+      spacing: {
+        entrySpacing: 14,
+        marginTB: 24,
+      },
+    },
+  },
+  {
+    id: 'petrol-blue',
+    name: 'Petrol Blue',
+    description: 'Deep petrol sidebar for credentials; wide column for experience and education',
+    persona: 'corporate',
+    layoutPreset: 'twoColumnPetrolLeft',
+    colorPalette: 'petrolBlue',
+    typographyPreset: 'robotoUppercase',
+    overrides: {
+      colors: {
+        sidebarBackground: '#f0f9ff',
+      },
+      advanced: {
+        sidebarBorderLeft: '4px solid #0c4a6e',
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'square-filled',
+      },
+      sectionSettings: {
+        skills: 'compact',
+        languages: 'compact',
+        certificates: 'compact',
+      },
+    },
+  },
+  {
+    id: 'evergreen-slate',
+    name: 'Evergreen Slate',
+    description: 'Full-width slate banner with photo and crisp banner-style section titles',
+    persona: 'corporate',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'evergreenSlate',
+    typographyPreset: 'interBannerUppercase',
+    overrides: {
+      colors: {
+        accent: '#334155',
+      },
+      personalDetails: {
+        align: 'left',
+        banner: true,
+        showPhoto: true,
+        photoFormat: 'circle',
+        photoSize: 96,
+        nameSize: 'xl',
+        nameBold: true,
+      },
+      spacing: {
+        entrySpacing: 12,
+        marginTB: 22,
+      },
+      sectionSettings: {
+        skills: 'compact',
+        languages: 'compact',
+      },
+    },
+  },
+  {
+    id: 'mckinsey',
+    name: 'McKinsey',
+    description: 'Dense, traditional single column — consulting-style hierarchy',
+    persona: 'corporate',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'minimalSlate',
+    typographyPreset: 'interUppercase',
+    overrides: {
+      personalDetails: {
+        align: 'left',
+        arrangement: 'pipe',
+        iconStyle: 'none',
+        nameSize: 'l',
+      },
+      spacing: {
+        fontSize: 9.5,
+        entrySpacing: 8,
+        marginTB: 16,
+        lineHeight: 1.25,
+      },
+      entryLayout: {
+        titleSize: 's',
+        subtitlePlacement: 'same-line',
+      },
+      sectionSettings: {
+        skills: 'compact',
+      },
+    },
+  },
+  {
+    id: 'designer',
+    name: 'Designer',
+    description: 'Bold violet sidebar for profile and skills; clean white experience column',
+    persona: 'creative',
+    layoutPreset: 'twoColumnLeft',
+    colorPalette: 'designerPurple',
+    typographyPreset: 'ralewayCapitalizeL',
+    overrides: {
+      colors: {
+        sidebarBackground: '#ede9fe',
+      },
+      advanced: {
+        sidebarBorderLeft: '5px solid #6b21a8',
+      },
+      layout: {
+        columnWidths: { left: 34, right: 66 },
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'rounded-filled',
+        showPhoto: true,
+        photoFormat: 'circle',
+        photoSize: 104,
+        nameSize: 'l',
+      },
+      sectionSettings: {
+        skills: 'bubble',
+        languages: 'grid',
+      },
+    },
+  },
+  {
+    id: 'monochrome',
+    name: 'Monochrome',
+    description: 'Strict black-and-white rhythm with ruled sections and zero color noise',
+    persona: 'modern',
+    layoutPreset: 'oneColumnTop',
+    colorPalette: 'monochrome',
+    typographyPreset: 'interUppercase',
+    overrides: {
+      colors: {
+        accent: '#000000',
+        text: '#262626',
+      },
+      personalDetails: {
+        align: 'left',
+        arrangement: 'icon',
+        iconStyle: 'square-outline',
+      },
+      spacing: {
+        entrySpacing: 11,
+        marginTB: 20,
+      },
+      sectionSettings: {
+        skills: 'compact',
+      },
     },
   },
 ];

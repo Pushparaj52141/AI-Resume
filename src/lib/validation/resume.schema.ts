@@ -101,14 +101,19 @@ export const designSchema = z.object({
     entrySpacing: z.number(),
   }),
   colors: z.object({
-    mode: z.enum(['basic', 'advanced']),
+    mode: z.enum(['basic', 'advanced', 'border']),
     accent: z.string(),
     text: z.string(),
     background: z.string(),
     customColors: z.record(z.string(), z.string().optional()),
+    themeVariant: z.enum(['accent', 'multi', 'image']).optional(),
+    accentApply: z.record(z.string(), z.boolean()).optional(),
+    sidebarBackground: z.string().optional(),
+    backgroundImage: z.string().optional(),
   }),
   typography: z.object({
     fontFamily: z.string(),
+    fontCategory: z.enum(['sans', 'serif', 'mono']).optional(),
     headings: z.object({
       style: z.string(),
       capitalization: z.enum(['none', 'capitalize', 'uppercase']),
@@ -122,6 +127,7 @@ export const designSchema = z.object({
     subtitlePlacement: z.enum(['same-line', 'next-line']),
     indentBody: z.boolean(),
     listStyle: z.enum(['bullet', 'hyphen']),
+    dateColumnMode: z.enum(['auto', 'manual']).optional(),
   }),
   personalDetails: z.object({
     align: z.enum(['left', 'center', 'right']),
@@ -129,10 +135,30 @@ export const designSchema = z.object({
     iconStyle: z.string(),
     nameSize: z.enum(['xs', 's', 'm', 'l', 'xl']),
     nameBold: z.boolean(),
+    nameFont: z.enum(['body', 'creative']).optional(),
     showPhoto: z.boolean(),
     photoSize: z.number(),
     photoFormat: z.enum(['circle', 'rounded', 'square']),
+    jobTitleSize: z.enum(['s', 'm', 'l']).optional(),
+    jobTitlePlacement: z.enum(['same-line', 'below']).optional(),
+    jobTitleStyle: z.enum(['normal', 'italic']).optional(),
   }),
+  footer: z
+    .object({
+      showPageNumbers: z.boolean(),
+      showEmail: z.boolean(),
+      showName: z.boolean(),
+    })
+    .optional(),
+  advanced: z
+    .object({
+      linkIcon: z.string(),
+      dateLocationOpacity: z.number(),
+      sidebarBorderLeft: z.string().optional(),
+      linkUnderline: z.boolean().optional(),
+      linkUseAccentBlue: z.boolean().optional(),
+    })
+    .optional(),
   sectionSettings: z.object({
     skills: z.enum(['grid', 'level', 'compact', 'bubble']),
     languages: z.enum(['grid', 'level', 'compact', 'bubble', 'text', 'dots', 'bar']),
@@ -141,7 +167,7 @@ export const designSchema = z.object({
     education: z.object({ order: z.enum(['degree-school', 'school-degree']) }),
     workExperience: z.object({ order: z.enum(['title-employer', 'employer-title']), groupPromotions: z.boolean() }),
   }),
-});
+}).passthrough();
 
 // --- Main Resume Schema ---
 

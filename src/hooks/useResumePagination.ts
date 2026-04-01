@@ -1,5 +1,5 @@
 
-import { useState, useLayoutEffect, useRef, useEffect } from 'react';
+import { useState, useLayoutEffect, useRef, useEffect, useMemo } from 'react';
 
 interface Dimensions {
     width: number;
@@ -8,20 +8,64 @@ interface Dimensions {
     marginBottom?: number;
 }
 
+export interface ResumePaginationOptions {
+    /** Single-page layout: skip DOM measurement and pagination (grids, template thumbnails). */
+    thumbnail?: boolean;
+}
+
+function signatureForPages(pages: any[][]): string {
+    return pages.map((p) => p.map((i) => i.id).join(',')).join('|');
+}
+
 export const useResumePagination = (
     items: any[],
-    renderItem: (item: any) => React.ReactNode,
-    pageDimensions: Dimensions
+    _renderItem: (item: any) => React.ReactNode,
+    pageDimensions: Dimensions,
+    opts?: ResumePaginationOptions
 ) => {
+    const thumbnail = opts?.thumbnail === true;
     const { height: PAGE_HEIGHT, marginTop: PAGE_PADDING_TOP = 40, marginBottom: PAGE_PADDING_BOTTOM = 40 } = pageDimensions;
-    const USABLE_PAGE_HEIGHT = PAGE_HEIGHT - PAGE_PADDING_TOP - PAGE_PADDING_BOTTOM - 10; // Extra 10px safety to prevent rounding issues at bottom limit
-    const [pages, setPages] = useState<any[][]>([]);
-    const [measuring, setMeasuring] = useState(true);
+    const USABLE_PAGE_HEIGHT = PAGE_HEIGHT - PAGE_PADDING_TOP - PAGE_PADDING_BOTTOM - 10;
+
+    const itemsKey = useMemo(() => items.map((i) => i.id).join('|'), [items]);
+
+    const [pages, setPages] = useState<any[][]>(() =>
+        thumbnail && items.length ? [items] : []
+    );
+    const [measuring, setMeasuring] = useState(() => !thumbnail);
     const containerRef = useRef<HTMLDivElement>(null);
     const [itemHeights, setItemHeights] = useState<Record<string, number>>({});
 
+    const heightsRef = useRef<Record<string, number>>({});
+    const pagesSigRef = useRef<string>('');
+
     useLayoutEffect(() => {
+        if (thumbnail) {
+            const next = items.length ? [items] : [];
+            const sig = signatureForPages(next);
+            if (sig !== pagesSigRef.current) {
+                pagesSigRef.current = sig;
+                setPages(next);
+            }
+            setMeasuring(false);
+            return;
+        }
+
+        if (items.length === 0) {
+            heightsRef.current = {};
+            pagesSigRef.current = '';
+            setItemHeights({});
+            setPages([]);
+            setMeasuring(false);
+            return;
+        }
+
         if (!containerRef.current) return;
+
+        heightsRef.current = {};
+        pagesSigRef.current = '';
+        setItemHeights({});
+        setMeasuring(true);
 
         const measure = () => {
             if (!containerRef.current) return;
@@ -36,7 +80,6 @@ export const useResumePagination = (
                     const rect = child.getBoundingClientRect();
                     let height = rect.height;
 
-                    // Add margins from the inner rendered element (the resume-item)
                     const firstChild = child.firstElementChild;
                     if (firstChild) {
                         const style = window.getComputedStyle(firstChild);
@@ -47,28 +90,38 @@ export const useResumePagination = (
 
                     newHeights[id] = height;
 
-                    if (itemHeights[id] !== height) {
+                    if (heightsRef.current[id] !== height) {
                         hasChanges = true;
                     }
                 }
             });
 
-            if (!hasChanges && Object.keys(newHeights).length !== Object.keys(itemHeights).length) {
+            if (!hasChanges && Object.keys(newHeights).length !== Object.keys(heightsRef.current).length) {
                 hasChanges = true;
             }
 
             if (hasChanges && Object.keys(newHeights).length > 0) {
+                heightsRef.current = newHeights;
                 setItemHeights(newHeights);
                 setMeasuring(false);
             }
         };
 
-        // Use requestAnimationFrame to wait for layout stabilization
-        const rafId = requestAnimationFrame(measure);
-        return () => cancelAnimationFrame(rafId);
-    }, [items, pageDimensions.width, itemHeights]);
+        // Double rAF: first paint often reports 0 heights; second pass gets real layout for A4 breaks
+        let raf1 = 0;
+        let raf2 = 0;
+        raf1 = requestAnimationFrame(() => {
+            measure();
+            raf2 = requestAnimationFrame(measure);
+        });
+        return () => {
+            cancelAnimationFrame(raf1);
+            cancelAnimationFrame(raf2);
+        };
+    }, [thumbnail, itemsKey, items.length, pageDimensions.width, pageDimensions.height]);
 
     useEffect(() => {
+        if (thumbnail) return;
         if (measuring || Object.keys(itemHeights).length === 0) return;
 
         const newPages: any[][] = [];
@@ -76,26 +129,29 @@ export const useResumePagination = (
         let currentHeight = 0;
 
         items.forEach((item, index) => {
+            if (item.type === 'page-break') {
+                if (currentPage.length > 0) {
+                    newPages.push(currentPage);
+                }
+                currentPage = [];
+                currentHeight = 0;
+                return;
+            }
+
             const sectionHeight = itemHeights[item.id] || 0;
 
-            // Check if we should break page
             let shouldBreak = false;
 
             if (currentPage.length > 0) {
-                // Standard break if item doesn't fit
                 if (currentHeight + sectionHeight > USABLE_PAGE_HEIGHT) {
                     shouldBreak = true;
-                }
-                // --- Keep with Next Logic ---
-                // If this is a title or a header block, check if at least one content block follows it on the same page
-                else if (
+                } else if (
                     (item.type === 'section-title' || (item.type === 'section-item' && item.content?._renderType === 'header')) &&
                     index < items.length - 1
                 ) {
                     const nextItem = items[index + 1];
                     const nextHeight = itemHeights[nextItem.id] || 0;
 
-                    // If title/header + next item > remaining space, break now to keep them together
                     if (currentHeight + sectionHeight + nextHeight > USABLE_PAGE_HEIGHT) {
                         shouldBreak = true;
                     }
@@ -116,12 +172,12 @@ export const useResumePagination = (
             newPages.push(currentPage);
         }
 
-        const isSame = JSON.stringify(newPages) === JSON.stringify(pages);
-        if (!isSame) {
+        const sig = signatureForPages(newPages);
+        if (sig !== pagesSigRef.current) {
+            pagesSigRef.current = sig;
             setPages(newPages);
         }
-
-    }, [items, itemHeights, measuring, pages, USABLE_PAGE_HEIGHT]);
+    }, [thumbnail, items, itemsKey, itemHeights, measuring, USABLE_PAGE_HEIGHT]);
 
     return {
         pages,

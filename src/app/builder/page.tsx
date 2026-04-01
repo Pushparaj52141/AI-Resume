@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, Suspense, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,13 +35,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import ResumeForm from '@/components/ResumeForm';
 import ResumePreview, { ResumePreviewHandle } from '@/components/ResumePreview';
-import AIResumeChecker from '@/components/AIResumeChecker';
-import FeatureShowcase from '@/components/FeatureShowcase';
-import ExportButtons from '@/components/ExportButtons';
-import ChangesVisualization from '@/components/ChangesVisualization';
-import AddSectionsModal from '@/components/AddSectionsModal';
-import BottomDockPanel from '@/components/BottomDockPanel';
-import CustomizeForm from '@/components/CustomizeForm';
+
+const AIResumeChecker = dynamic(() => import('@/components/AIResumeChecker'));
+const FeatureShowcase = dynamic(() => import('@/components/FeatureShowcase'));
+const ExportButtons = dynamic(() => import('@/components/ExportButtons'));
+const ChangesVisualization = dynamic(() => import('@/components/ChangesVisualization'));
+const AddSectionsModal = dynamic(() => import('@/components/AddSectionsModal'));
+const BottomDockPanel = dynamic(() => import('@/components/BottomDockPanel'));
+const CustomizeForm = dynamic(() => import('@/components/CustomizeForm'));
 import { toast } from 'sonner';
 import '@/components/bottom-dock-panel.css';
 
@@ -49,7 +51,7 @@ import { loadResumeData, saveResumeData, clearResumeData, loadResumeDataFromDB, 
 import { useAuth } from '@/contexts/AuthContext';
 import { trackResumeChanges, type ChangesSummary } from '@/lib/change-tracker';
 import { DEFAULT_DESIGN } from '@/lib/defaults';
-import { getTemplateById } from '@/lib/templates';
+import { getTemplateById, normalizeResumeTemplateIds } from '@/lib/templates';
 import atsOptimizedResume from '@/lib/seed/atsOptimizedResume';
 import lastAIResponseResume from '@/lib/seed/lastAIResponseResume';
 
@@ -82,6 +84,8 @@ function BuilderPageContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [autoSave, setAutoSave] = useState(true);
   const [viewMode, setViewMode] = useState<'split' | 'info' | 'preview'>('split');
+  /** Avoid TS narrowing in `viewMode === 'info'` branch so toolbar buttons compare full union */
+  const viewModeForToolbar = viewMode;
   const [changesSummary, setChangesSummary] = useState<ChangesSummary | null>(null);
   const [isSaved, setIsSaved] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -133,14 +137,15 @@ function BuilderPageContent() {
       const template = templateId ? getTemplateById(templateId) : undefined;
 
       const applyDesign = (data: ResumeData) => {
-        const design = template ? { ...template.design } : { ...(data.design || DEFAULT_DESIGN) };
+        const normalized = normalizeResumeTemplateIds(data);
+        const design = template ? { ...template.design } : { ...(normalized.design || DEFAULT_DESIGN) };
 
         // Auto-migration: If margins are at the old wide defaults, tighten them
         if (design.spacing.marginLR === 21) design.spacing.marginLR = 14;
         if (design.spacing.marginTB === 21) design.spacing.marginTB = 18;
 
         return {
-          ...data,
+          ...normalized,
           design
         };
       };
@@ -656,7 +661,7 @@ function BuilderPageContent() {
                   </CardHeader>
                   <CardContent className="max-h-[calc(100vh-160px)] overflow-y-auto">
                     {currentView === 'customize' ? (
-                      <CustomizeForm />
+                      <CustomizeForm onAddSections={() => setAddSectionsModalOpen(true)} />
                     ) : (
                       <ResumeForm
                         selectedSections={selectedSections}
@@ -878,7 +883,7 @@ function BuilderPageContent() {
                   <span>Content</span>
                 </Button>
                 <Button
-                  variant={viewMode === 'split' ? 'secondary' : 'ghost'}
+                  variant={viewModeForToolbar === 'split' ? 'secondary' : 'ghost'}
                   size="sm"
                   className={cn(
                     "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all text-slate-500"
@@ -889,7 +894,7 @@ function BuilderPageContent() {
                   <span>Split View</span>
                 </Button>
                 <Button
-                  variant={viewMode === 'preview' ? 'secondary' : 'ghost'}
+                  variant={viewModeForToolbar === 'preview' ? 'secondary' : 'ghost'}
                   size="sm"
                   className={cn(
                     "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all text-slate-500"
@@ -921,7 +926,7 @@ function BuilderPageContent() {
                 </CardHeader>
                 <CardContent className="max-h-[calc(100vh-160px)] overflow-y-auto">
                   {currentView === 'customize' ? (
-                    <CustomizeForm />
+                    <CustomizeForm onAddSections={() => setAddSectionsModalOpen(true)} />
                   ) : (
                     <ResumeForm
                       selectedSections={selectedSections}
@@ -935,13 +940,12 @@ function BuilderPageContent() {
           </div>
         )}
         {viewMode === 'preview' && (
-          <div className="w-full flex justify-center py-8">
+          <div className="w-full flex justify-center py-4">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="bg-white rounded-xl shadow-2xl border border-slate-200"
-              style={{ width: '210mm', height: '297mm', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden', padding: '32px' }}
+              className="w-full max-w-full flex justify-center"
             >
               <ResumePreview
                 ref={resumePreviewRef}
