@@ -81,9 +81,13 @@ export const ResumePage = React.forwardRef<HTMLDivElement, ResumePageProps>(({
             >
                 <div className="h-full w-full relative">
                     {children}
-                    <div className="absolute bottom-4 right-8 text-[10px] text-slate-300 pointer-events-none hidden">
-                        Page {pageNumber} of {totalNumbers}
-                    </div>
+                    {totalNumbers > 1 && (
+                        <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none select-none">
+                            <span className="text-[9px] tracking-[0.2em] text-slate-400 uppercase">
+                                Page {pageNumber} of {totalNumbers}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -141,10 +145,13 @@ export const ResumePage = React.forwardRef<HTMLDivElement, ResumePageProps>(({
             >
                 <div className="min-h-0 flex-1 w-full relative overflow-visible">
                     {children}
-
-                    <div className="absolute bottom-4 right-8 text-[10px] text-slate-300 pointer-events-none hidden">
-                        Page {pageNumber} of {totalNumbers}
-                    </div>
+                    {totalNumbers > 1 && (
+                        <div className="absolute bottom-3 left-0 right-0 flex justify-center pointer-events-none select-none">
+                            <span className="text-[9px] tracking-[0.2em] text-slate-400 uppercase">
+                                Page {pageNumber} of {totalNumbers}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

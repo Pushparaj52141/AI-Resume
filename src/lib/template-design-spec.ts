@@ -646,7 +646,8 @@ export const TEMPLATE_SPECS: TemplateSpec[] = [
       },
       spacing: {
         entrySpacing: 10,
-        marginTB: 22,
+        // Reduce top whitespace above the resume header (photo/name).
+        marginTB: 16,
         lineHeight: 1.35,
       },
       sectionSettings: {
@@ -675,7 +676,8 @@ export const TEMPLATE_SPECS: TemplateSpec[] = [
       },
       spacing: {
         entrySpacing: 14,
-        marginTB: 24,
+        // Less top/bottom room; bring header content up.
+        marginTB: 18,
       },
     },
   },
@@ -820,7 +822,8 @@ export const TEMPLATE_SPECS: TemplateSpec[] = [
       },
       spacing: {
         entrySpacing: 11,
-        marginTB: 20,
+        // Reduce page padding so header sits closer to the top.
+        marginTB: 15,
       },
       sectionSettings: {
         skills: 'compact',

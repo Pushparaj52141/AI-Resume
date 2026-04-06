@@ -27,6 +27,11 @@ export default function LandingHeader() {
     setMobileMenuOpen(false);
   };
 
+  const userInitial =
+    user?.name?.trim()?.charAt(0)?.toUpperCase() ||
+    user?.email?.charAt(0)?.toUpperCase() ||
+    '?';
+
   return (
     <header
       className={`sticky top-0 z-50 w-full border-b border-orange-200/30 transition-all duration-300 ${scrolled ? 'glass-card bg-white/80 backdrop-blur-md shadow-sm' : 'glass-card'
@@ -42,8 +47,8 @@ export default function LandingHeader() {
               <FileText className="h-6 w-6 text-white" />
             </div>
             <div>
-              <span className="font-bold gradient-text text-lg sm:text-xl">
-                Resume AI Builder
+              <span className="font-bold text-lg sm:text-xl tracking-tight text-slate-900">
+                MyDream<span className="gradient-text">Resume</span>
               </span>
             </div>
           </Link>
@@ -70,7 +75,12 @@ export default function LandingHeader() {
             {!loading && (
               user ? (
                 <>
-                  <span className="text-sm text-muted-foreground">{user.name}</span>
+                  <Button asChild variant="ghost" className="rounded-xl text-muted-foreground hover:text-foreground">
+                    <Link href="/dashboard">My Resumes</Link>
+                  </Button>
+                  <Button asChild className="gradient-primary text-white font-semibold rounded-xl">
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -80,12 +90,13 @@ export default function LandingHeader() {
                     <LogOut className="h-4 w-4 mr-2" />
                     Logout
                   </Button>
-                  <Button asChild variant="ghost" className="rounded-xl text-muted-foreground hover:text-foreground hidden sm:flex">
-                    <Link href="/dashboard">My Resumes</Link>
-                  </Button>
-                  <Button asChild className="gradient-primary text-white font-semibold rounded-xl">
-                    <Link href="/dashboard">Dashboard</Link>
-                  </Button>
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full gradient-primary text-sm font-bold text-white shadow-md"
+                    title={user.name}
+                    aria-label={`Signed in as ${user.name}`}
+                  >
+                    {userInitial}
+                  </div>
                 </>
               ) : (
                 <>
@@ -152,10 +163,14 @@ export default function LandingHeader() {
               {!loading && (
                 user ? (
                   <>
-                    <span className="text-sm text-muted-foreground py-2">{user.name}</span>
                     <Button asChild className="gradient-primary text-white font-semibold rounded-xl w-full">
                       <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
                         My Resumes
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full rounded-xl font-semibold">
+                      <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                        Dashboard
                       </Link>
                     </Button>
                     <Button
@@ -166,6 +181,15 @@ export default function LandingHeader() {
                       <LogOut className="h-4 w-4 mr-2" />
                       Logout
                     </Button>
+                    <div className="flex items-center justify-center gap-3 py-2 border-t border-orange-200/30 mt-1 pt-4">
+                      <div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full gradient-primary text-base font-bold text-white shadow-md"
+                        title={user.name}
+                        aria-label={`Signed in as ${user.name}`}
+                      >
+                        {userInitial}
+                      </div>
+                    </div>
                   </>
                 ) : (
                   <>

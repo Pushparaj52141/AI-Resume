@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Main Resume AI Builder Page
+ * Main resume builder page (MyDreamResume)
  * Two-column layout with form on left and preview/analysis on right
  */
 
-import React, { useState, useEffect, Suspense, useRef, useCallback } from 'react';
+import React, { useState, useEffect, Suspense, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -24,7 +24,6 @@ import {
   LogOut,
   LayoutGrid,
   ChevronDown,
-  MoreVertical,
   Briefcase,
   Columns2,
   Type
@@ -47,7 +46,7 @@ import { toast } from 'sonner';
 import '@/components/bottom-dock-panel.css';
 
 import type { ResumeData } from '@/lib/types';
-import { loadResumeData, saveResumeData, clearResumeData, loadResumeDataFromDB, saveResumeDataToDB, cn } from '@/lib/utils';
+import { loadResumeData, saveResumeData, clearResumeData, loadResumeDataFromDB, cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackResumeChanges, type ChangesSummary } from '@/lib/change-tracker';
 import { DEFAULT_DESIGN } from '@/lib/defaults';
@@ -57,22 +56,87 @@ import lastAIResponseResume from '@/lib/seed/lastAIResponseResume';
 
 import { useResumeStore } from '@/store/useResumeStore';
 
+/** Plain text blob for ATS / analysis — module scope avoids reallocating the function every render. */
+function generateFullResumeContent(data: ResumeData): string {
+  const content: string[] = [];
+
+  if (data.personalInfo.fullName) {
+    content.push(`Name: ${data.personalInfo.fullName}`);
+  }
+  if (data.personalInfo.email) {
+    content.push(`Email: ${data.personalInfo.email}`);
+  }
+  if (data.personalInfo.phone) {
+    content.push(`Phone: ${data.personalInfo.phone}`);
+  }
+  if (data.personalInfo.location) {
+    content.push(`Location: ${data.personalInfo.location}`);
+  }
+  if (data.personalInfo.linkedIn) {
+    content.push(`LinkedIn: ${data.personalInfo.linkedIn}`);
+  }
+  if (data.personalInfo.website) {
+    content.push(`Website: ${data.personalInfo.website}`);
+  }
+
+  if (data.personalInfo.summary) {
+    content.push(`\nProfessional Summary:\n${data.personalInfo.summary}`);
+  }
+
+  if (data.experience.length > 0) {
+    content.push('\nExperience:');
+    data.experience.forEach((exp) => {
+      content.push(`\n${exp.position} at ${exp.company} (${exp.startDate} - ${exp.current ? 'Present' : exp.endDate})`);
+      if (exp.description) {
+        content.push(exp.description);
+      }
+      if (exp.achievements.length > 0) {
+        content.push('Achievements:');
+        exp.achievements.forEach((achievement) => {
+          content.push(`• ${achievement}`);
+        });
+      }
+    });
+  }
+
+  if (data.education.length > 0) {
+    content.push('\nEducation:');
+    data.education.forEach((edu) => {
+      let eduLine = edu.institution;
+      if (edu.degree && edu.field) {
+        eduLine = `${edu.degree} in ${edu.field} from ${edu.institution}`;
+      } else if (edu.degree) {
+        eduLine = `${edu.degree} from ${edu.institution}`;
+      } else if (edu.field) {
+        eduLine = `${edu.field} from ${edu.institution}`;
+      }
+      eduLine += ` (${edu.startYear} - ${edu.endYear})`;
+      content.push(eduLine);
+      if (edu.gpa) {
+        content.push(`GPA: ${edu.gpa}`);
+      }
+    });
+  }
+
+  if (data.skills.length > 0) {
+    content.push(`\nTechnical Skills: ${data.skills.map((skill) => skill.name).join(', ')}`);
+  }
+
+  return content.join('\n');
+}
+
 function BuilderPageContent() {
   const searchParams = useSearchParams();
   const [previewVisible] = useState(true);
 
-  // Zustand store
-  const {
-    data: resumeData,
-    setResumeData,
-    updateDesign,
-    isInitialLoad,
-    setInitialLoad,
-    setSelectedSections: setStoreSelectedSections
-  } = useResumeStore();
+  const resumeData = useResumeStore((s) => s.data);
+  const setResumeData = useResumeStore((s) => s.setResumeData);
+  const updateDesign = useResumeStore((s) => s.updateDesign);
+  const isInitialLoad = useResumeStore((s) => s.isInitialLoad);
+  const setInitialLoad = useResumeStore((s) => s.setInitialLoad);
+  const setSelectedSections = useResumeStore((s) => s.setSelectedSections);
 
   const selectedSections = resumeData.selectedSections || ['personalInfo', 'summary', 'experience', 'education', 'skills'];
-  const setSelectedSections = setStoreSelectedSections;
 
   const [dockOpen, setDockOpen] = useState(false);
   const router = useRouter();
@@ -109,9 +173,8 @@ function BuilderPageContent() {
       return;
     }
 
-    // Save current state first
+    // Save current state first (localStorage + MongoDB via saveResumeData)
     saveResumeData(resumeData);
-    saveResumeDataToDB(resumeData).catch(console.error);
 
     // Redirect to the AI Generation (Target Job & Prompts) module
     router.push('/generate');
@@ -123,6 +186,16 @@ function BuilderPageContent() {
   // Load saved data on mount
   // Track what we've already loaded to prevented recursive loops or accidental overwrites
   const lastLoadedRef = useRef<string | null>(null);
+
+  const resumeDataForAnalysis = useMemo(
+    () => (analysisMode === 'ai' && aiPreviewData ? aiPreviewData : resumeData),
+    [analysisMode, aiPreviewData, resumeData]
+  );
+
+  const fullResumeContentForAnalysis = useMemo(
+    () => generateFullResumeContent(resumeDataForAnalysis),
+    [resumeDataForAnalysis]
+  );
 
   // Load saved data on mount or when params change
   useEffect(() => {
@@ -174,80 +247,6 @@ function BuilderPageContent() {
     };
   }, [setInitialLoad]);
 
-  // Comprehensive resume content for analysis
-  const generateFullResumeContent = (data: ResumeData): string => {
-    const content = [];
-
-    // Personal Info & Summary
-    if (data.personalInfo.fullName) {
-      content.push(`Name: ${data.personalInfo.fullName}`);
-    }
-    if (data.personalInfo.email) {
-      content.push(`Email: ${data.personalInfo.email}`);
-    }
-    if (data.personalInfo.phone) {
-      content.push(`Phone: ${data.personalInfo.phone}`);
-    }
-    if (data.personalInfo.location) {
-      content.push(`Location: ${data.personalInfo.location}`);
-    }
-    if (data.personalInfo.linkedIn) {
-      content.push(`LinkedIn: ${data.personalInfo.linkedIn}`);
-    }
-    if (data.personalInfo.website) {
-      content.push(`Website: ${data.personalInfo.website}`);
-    }
-
-    // Professional Summary
-    if (data.personalInfo.summary) {
-      content.push(`\nProfessional Summary:\n${data.personalInfo.summary}`);
-    }
-
-    // Experience
-    if (data.experience.length > 0) {
-      content.push('\nExperience:');
-      data.experience.forEach(exp => {
-        content.push(`\n${exp.position} at ${exp.company} (${exp.startDate} - ${exp.current ? 'Present' : exp.endDate})`);
-        if (exp.description) {
-          content.push(exp.description);
-        }
-        if (exp.achievements.length > 0) {
-          content.push('Achievements:');
-          exp.achievements.forEach(achievement => {
-            content.push(`• ${achievement}`);
-          });
-        }
-      });
-    }
-
-    // Education
-    if (data.education.length > 0) {
-      content.push('\nEducation:');
-      data.education.forEach(edu => {
-        let eduLine = edu.institution;
-        if (edu.degree && edu.field) {
-          eduLine = `${edu.degree} in ${edu.field} from ${edu.institution}`;
-        } else if (edu.degree) {
-          eduLine = `${edu.degree} from ${edu.institution}`;
-        } else if (edu.field) {
-          eduLine = `${edu.field} from ${edu.institution}`;
-        }
-        eduLine += ` (${edu.startYear} - ${edu.endYear})`;
-        content.push(eduLine);
-        if (edu.gpa) {
-          content.push(`GPA: ${edu.gpa}`);
-        }
-      });
-    }
-
-    // Skills
-    if (data.skills.length > 0) {
-      content.push(`\nTechnical Skills: ${data.skills.map(skill => skill.name).join(', ')}`);
-    }
-
-    return content.join('\n');
-  };
-
   // Auto-switch to AI analysis mode when AI preview data is available
   useEffect(() => {
     if (aiPreviewData && currentView === 'ats') {
@@ -262,7 +261,6 @@ function BuilderPageContent() {
         // Include selectedSections in auto-save
         const dataToSave = { ...resumeData, selectedSections };
         saveResumeData(dataToSave);
-        saveResumeDataToDB(dataToSave).catch(console.error);
       }, 2000);
 
       return () => clearTimeout(timeoutId);
@@ -271,7 +269,6 @@ function BuilderPageContent() {
 
   const handleSave = () => {
     saveResumeData(resumeData);
-    saveResumeDataToDB(resumeData).catch(console.error);
     setIsSaved(true);
     const button = document.getElementById('save-button');
     if (button) {
@@ -356,7 +353,7 @@ function BuilderPageContent() {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#f8f9fa]">
       {!dockOpen && (
         <div className="fixed bottom-6 right-8 z-50">
           <Button
@@ -433,7 +430,7 @@ function BuilderPageContent() {
         </div>
       </BottomDockPanel>
 
-      <header className="sticky top-0 z-50 w-full glass-card border-b border-white/20">
+      <header className="fixed top-0 left-0 right-0 z-50 w-full glass-card border-b border-white/20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between w-full">
             {/* Left Side: Overview */}
@@ -494,8 +491,8 @@ function BuilderPageContent() {
               </Button>
             </div>
 
-            {/* Right Side: Save, Generate AI, Logout, Download */}
-            <div className="flex items-center gap-3">
+            {/* Right Side: Save, Generate AI, Download, Logout (logout last) */}
+            <div className="flex items-center gap-2 sm:gap-3">
               <div className="hidden lg:flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -519,7 +516,29 @@ function BuilderPageContent() {
                   )}
                   <span className="tracking-tight">Generate AI</span>
                 </Button>
+              </div>
 
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleNavbarDownload}
+                disabled={isDownloading}
+                className="bg-[#1e1b4b] hover:bg-[#1a173d] text-white font-bold h-11 px-4 sm:px-6 rounded-xl flex items-center gap-2 shadow-lg hover:shadow-xl transition-all shrink-0"
+              >
+                {isDownloading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="hidden sm:inline">Downloading...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="hidden sm:inline">Download</span>
+                    <Download size={18} className="text-white sm:ml-0" />
+                  </>
+                )}
+              </Button>
+
+              <div className="hidden md:flex">
                 <Button
                   variant="ghost"
                   onClick={handleLogout}
@@ -527,32 +546,6 @@ function BuilderPageContent() {
                 >
                   <LogOut size={18} className="text-slate-400" />
                   <span>Logout</span>
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-1.5 p-1 bg-slate-100/40 rounded-2xl border border-slate-200/40">
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleNavbarDownload}
-                  disabled={isDownloading}
-                  className="bg-[#1e1b4b] hover:bg-[#1a173d] text-white font-bold h-11 px-6 rounded-xl flex items-center gap-2 shadow-lg hover:shadow-xl transition-all"
-                >
-                  {isDownloading ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Downloading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Download</span>
-                      <Download size={18} className="text-white" />
-                    </>
-                  )}
-                </Button>
-
-                <Button variant="ghost" size="icon" className="h-11 w-11 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-white/60">
-                  <MoreVertical size={20} />
                 </Button>
               </div>
             </div>
@@ -637,43 +630,49 @@ function BuilderPageContent() {
         </div>
       </header>
 
-      <main id="main-content" className="w-full px-0 py-4">
+      <main id="main-content" className="w-full px-0 pb-4 pt-20">
         {viewMode === 'split' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 w-full mx-0">
-            <div className="lg:col-span-5 flex flex-col flex-1">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5 }}
-                className="sticky top-16"
-              >
-                <Card className="glass-card border-0 shadow-2xl card-hover-glow">
-                  <CardHeader className="pb-2 border-b border-white/10">
-                    <CardTitle className="flex items-center space-x-3">
-                      <div className="gradient-primary p-2 rounded-xl">
-                        <Settings className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <span className="gradient-text text-lg font-semibold">Resume Information</span>
-                        <p className="text-sm text-muted-foreground font-normal">Build your professional resume</p>
-                      </div>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="max-h-[calc(100vh-160px)] overflow-y-auto">
-                    {currentView === 'customize' ? (
-                      <CustomizeForm onAddSections={() => setAddSectionsModalOpen(true)} />
-                    ) : (
-                      <ResumeForm
-                        selectedSections={selectedSections}
-                        onOpenSectionsModal={() => setAddSectionsModalOpen(true)}
-                        onSectionsOrderChange={setSelectedSections}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              </motion.div>
+            <div className="lg:col-span-5 flex flex-col flex-1 min-w-0">
+              {/* Sticky must NOT be on motion.* — transforms break position:sticky */}
+              <div className="sticky top-16 z-20 self-start w-full max-h-[calc(100vh-4rem)] flex flex-col">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.35 }}
+                  className="flex flex-col flex-1 min-h-0"
+                >
+                  <Card className="glass-card border-0 shadow-2xl card-hover-glow flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <CardHeader className="shrink-0 pb-2 border-b border-white/10">
+                      <CardTitle className="flex items-center space-x-3">
+                        <div className="gradient-primary p-2 rounded-xl">
+                          <Settings className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <span className="gradient-text text-lg font-semibold">Resume Information</span>
+                          <p className="text-sm text-muted-foreground font-normal">Build your professional resume</p>
+                        </div>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
+                      {currentView === 'customize' ? (
+                        <CustomizeForm onAddSections={() => setAddSectionsModalOpen(true)} />
+                      ) : (
+                        <ResumeForm
+                          selectedSections={selectedSections}
+                          onOpenSectionsModal={() => setAddSectionsModalOpen(true)}
+                          onSectionsOrderChange={setSelectedSections}
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </div>
             </div>
-            <div className="lg:col-span-7 flex flex-col flex-1">
+            <div className="lg:col-span-7 flex flex-col flex-1 min-w-0">
+              {/* Sticky preview in split view: stays under the header; inner scroll if resume is taller than viewport */}
+              <div className="w-full lg:sticky lg:top-16 lg:z-10 lg:self-start">
+                <div className="lg:max-h-[calc(100vh-4rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pb-4 [scrollbar-gutter:stable]">
               <AnimatePresence mode="wait">
                 {previewVisible && (
                   <motion.div
@@ -791,10 +790,8 @@ function BuilderPageContent() {
                           )}
 
                           <AIResumeChecker
-                            resumeData={analysisMode === 'ai' && aiPreviewData ? aiPreviewData : resumeData}
-                            resumeContent={generateFullResumeContent(
-                              analysisMode === 'ai' && aiPreviewData ? aiPreviewData : resumeData
-                            )}
+                            resumeData={resumeDataForAnalysis}
+                            resumeContent={fullResumeContentForAnalysis}
                             analysisMode={analysisMode}
                           />
                         </motion.div>
@@ -863,80 +860,85 @@ function BuilderPageContent() {
                   </motion.div>
                 )}
               </AnimatePresence>
+                </div>
+              </div>
             </div>
           </div>
         )}
         {viewMode === 'info' && (
           <div className="w-full px-4">
-            <div className="flex justify-center mb-6">
-              <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm p-1.5 rounded-2xl shadow-lg border border-white/20">
-                <Button
-                  variant={viewMode === 'info' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className={cn(
-                    "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all",
-                    viewMode === 'info' ? "bg-white shadow-md ring-1 ring-slate-200 text-orange-500" : "text-slate-500"
-                  )}
-                  onClick={() => setViewMode('info')}
-                >
-                  <Type className="h-4 w-4" />
-                  <span>Content</span>
-                </Button>
-                <Button
-                  variant={viewModeForToolbar === 'split' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className={cn(
-                    "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all text-slate-500"
-                  )}
-                  onClick={() => setViewMode('split')}
-                >
-                  <Columns2 className="h-4 w-4" />
-                  <span>Split View</span>
-                </Button>
-                <Button
-                  variant={viewModeForToolbar === 'preview' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className={cn(
-                    "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all text-slate-500"
-                  )}
-                  onClick={() => setViewMode('preview')}
-                >
-                  <Eye className="h-4 w-4" />
-                  <span>Preview</span>
-                </Button>
+            {/* Toolbar + card header stay visible; only form scrolls (sticky stack below fixed site header) */}
+            <div className="sticky top-16 z-20 mx-auto max-w-6xl flex flex-col max-h-[calc(100vh-4rem)]">
+              <div className="shrink-0 flex justify-center pb-3 pt-1">
+                <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm p-1.5 rounded-2xl shadow-lg border border-white/20">
+                  <Button
+                    variant={viewMode === 'info' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className={cn(
+                      "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all",
+                      viewMode === 'info' ? "bg-white shadow-md ring-1 ring-slate-200 text-orange-500" : "text-slate-500"
+                    )}
+                    onClick={() => setViewMode('info')}
+                  >
+                    <Type className="h-4 w-4" />
+                    <span>Content</span>
+                  </Button>
+                  <Button
+                    variant={viewModeForToolbar === 'split' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className={cn(
+                      "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all text-slate-500"
+                    )}
+                    onClick={() => setViewMode('split')}
+                  >
+                    <Columns2 className="h-4 w-4" />
+                    <span>Split View</span>
+                  </Button>
+                  <Button
+                    variant={viewModeForToolbar === 'preview' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className={cn(
+                      "h-10 px-6 rounded-xl text-xs font-bold uppercase tracking-tight gap-2 transition-all text-slate-500"
+                    )}
+                    onClick={() => setViewMode('preview')}
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span>Preview</span>
+                  </Button>
+                </div>
               </div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.35 }}
+                className="min-h-0 flex-1 flex flex-col"
+              >
+                <Card className="glass-card border-0 shadow-2xl card-hover-glow flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <CardHeader className="shrink-0 pb-2 border-b border-white/10">
+                    <CardTitle className="flex items-center space-x-3">
+                      <div className="gradient-primary p-2 rounded-xl">
+                        <Settings className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="gradient-text text-lg font-semibold">Resume Information</span>
+                        <p className="text-sm text-muted-foreground font-normal">Build your professional resume</p>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
+                    {currentView === 'customize' ? (
+                      <CustomizeForm onAddSections={() => setAddSectionsModalOpen(true)} />
+                    ) : (
+                      <ResumeForm
+                        selectedSections={selectedSections}
+                        onOpenSectionsModal={() => setAddSectionsModalOpen(true)}
+                        onSectionsOrderChange={setSelectedSections}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
             </div>
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5 }}
-              className="mx-auto max-w-6xl"
-            >
-              <Card className="glass-card border-0 shadow-2xl card-hover-glow">
-                <CardHeader className="pb-2 border-b border-white/10">
-                  <CardTitle className="flex items-center space-x-3">
-                    <div className="gradient-primary p-2 rounded-xl">
-                      <Settings className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <span className="gradient-text text-lg font-semibold">Resume Information</span>
-                      <p className="text-sm text-muted-foreground font-normal">Build your professional resume</p>
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="max-h-[calc(100vh-160px)] overflow-y-auto">
-                  {currentView === 'customize' ? (
-                    <CustomizeForm onAddSections={() => setAddSectionsModalOpen(true)} />
-                  ) : (
-                    <ResumeForm
-                      selectedSections={selectedSections}
-                      onOpenSectionsModal={() => setAddSectionsModalOpen(true)}
-                      onSectionsOrderChange={setSelectedSections}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
           </div>
         )}
         {viewMode === 'preview' && (

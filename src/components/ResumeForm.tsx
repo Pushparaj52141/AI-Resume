@@ -60,7 +60,7 @@ import { Textarea } from '@/components/ui/textarea';
 import RichTextEditor from '@/components/RichTextEditor';
 
 import type { ResumeData, PersonalInfo, Experience, Education, Skill, Certificate, Interest, Project, Course, Award, Organisation, Publication, Reference, Language, Declaration, CustomSection } from '@/lib/types';
-import { cn, generateId, isValidEmail, isValidPhone, isValidUrl } from '@/lib/utils';
+import { cn, decodeHtml, generateId, isValidEmail, isValidPhone, isValidUrl } from '@/lib/utils';
 
 import { useResumeStore } from '@/store/useResumeStore';
 
@@ -74,7 +74,8 @@ interface ResumeFormProps {
 type SummaryAssistMode = 'improve' | 'grammar' | 'shorter';
 
 const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalInfo', 'experience', 'education', 'skills'], onOpenSectionsModal, onSectionsOrderChange }) => {
-  const { data, setResumeData: onChange } = useResumeStore();
+  const data = useResumeStore((s) => s.data);
+  const onChange = useResumeStore((s) => s.setResumeData);
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
@@ -755,89 +756,7 @@ const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalIn
 
   const renderSectionContent = (sectionId: string) => {
     switch (sectionId) {
-      case 'personalInfo':
-        if (!isEditingPersonal) {
-          return (
-            <div
-              className="relative p-5 cursor-pointer group transition-all"
-              onClick={() => setIsEditingPersonal(true)}
-            >
-              <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                <button
-                  className="p-2 bg-orange-500 text-white rounded-full shadow-lg hover:bg-orange-600 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsEditingPersonal(true);
-                  }}
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="flex justify-between items-start gap-6">
-                <div className="flex-1 space-y-1">
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-                    {data.personalInfo.fullName || 'Your Name'}
-                  </h2>
-                  <p className="text-base font-semibold text-orange-500 mb-3 block">
-                    {data.jobTitle || 'Your Profession'}
-                  </p>
-
-                  <div className="space-y-1.5">
-                    {data.personalInfo.email && (
-                      <div className="flex items-center text-slate-500 gap-2.5">
-                        <Mail className="w-3.5 h-3.5" />
-                        <span className="text-sm font-medium">{data.personalInfo.email}</span>
-                      </div>
-                    )}
-                    {data.personalInfo.phone && (
-                      <div className="flex items-center text-slate-500 gap-2.5">
-                        <PhoneIcon className="w-3.5 h-3.5" />
-                        <span className="text-sm font-medium">{data.personalInfo.phone}</span>
-                      </div>
-                    )}
-                    {data.personalInfo.location && (
-                      <div className="flex items-center text-slate-500 gap-2.5">
-                        <MapPin className="w-3.5 h-3.5" />
-                        <span className="text-sm font-medium">{data.personalInfo.location}</span>
-                      </div>
-                    )}
-                    {data.personalInfo.linkedIn && (
-                      <div className="flex items-center text-slate-500 gap-2.5">
-                        <Linkedin className="w-3.5 h-3.5" />
-                        <span className="text-sm font-medium">{data.personalInfo.linkedIn}</span>
-                      </div>
-                    )}
-                    {data.personalInfo.github && (
-                      <div className="flex items-center text-slate-500 gap-2.5">
-                        <Code className="w-3.5 h-3.5" />
-                        <span className="text-sm font-medium">{data.personalInfo.github}</span>
-                      </div>
-                    )}
-                    {data.personalInfo.website && (
-                      <div className="flex items-center text-slate-500 gap-2.5">
-                        <GlobeIcon className="w-3.5 h-3.5" />
-                        <span className="text-sm font-medium">{data.personalInfo.website}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {data.personalInfo.photo ? (
-                  <div className="relative w-28 h-28 rounded-2xl overflow-hidden shadow-sm shrink-0 border border-slate-100">
-                    <img src={data.personalInfo.photo} alt="Profile" className="w-full h-full object-cover" />
-                  </div>
-                ) : (
-                  <div className="w-28 h-28 rounded-2xl bg-slate-50 flex items-center justify-center border border-dashed border-slate-200 shrink-0">
-                    <User className="w-8 h-8 text-slate-300" />
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        }
-
-        // --- FlowCV-style Edit Personal Details Form ---
+      case 'personalInfo': {
         const optionalDetailFields = [
           { id: 'website', label: 'Website', icon: GlobeIcon },
           { id: 'nationality', label: 'Nationality', icon: Globe },
@@ -863,8 +782,112 @@ const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalIn
           handlePersonalInfoChange(fieldId as keyof PersonalInfo, '');
         };
 
+        const personalEase = [0.25, 0.1, 0.25, 1] as [number, number, number, number];
+        const personalTransition = { duration: 0.28, ease: personalEase };
+
         return (
-          <div className="p-6 bg-white relative">
+          <AnimatePresence mode="wait" initial={false}>
+            {!isEditingPersonal ? (
+              <motion.div
+                key="personal-preview"
+                className="relative"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={personalTransition}
+              >
+                <div
+                  className="relative p-5 cursor-pointer group transition-all duration-200"
+                  onClick={() => setIsEditingPersonal(true)}
+                >
+                  <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                    <button
+                      type="button"
+                      className="p-2 bg-orange-500 text-white rounded-full shadow-lg hover:bg-orange-600 transition-colors duration-200"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsEditingPersonal(true);
+                      }}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex justify-between items-start gap-6">
+                    <div className="flex-1 space-y-1">
+                      <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+                        {data.personalInfo.fullName || 'Your Name'}
+                      </h2>
+                      {data.jobTitle?.trim() ? (
+                        <div
+                          className="text-base font-semibold text-orange-500 mb-3 [&_p]:m-0 [&_div]:m-0 prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{ __html: decodeHtml(data.jobTitle.trim()) }}
+                        />
+                      ) : (
+                        <p className="text-base font-semibold text-orange-500 mb-3">Your Profession</p>
+                      )}
+
+                      <div className="space-y-1.5">
+                        {data.personalInfo.email && (
+                          <div className="flex items-center text-slate-500 gap-2.5">
+                            <Mail className="w-3.5 h-3.5" />
+                            <span className="text-sm font-medium">{data.personalInfo.email}</span>
+                          </div>
+                        )}
+                        {data.personalInfo.phone && (
+                          <div className="flex items-center text-slate-500 gap-2.5">
+                            <PhoneIcon className="w-3.5 h-3.5" />
+                            <span className="text-sm font-medium">{data.personalInfo.phone}</span>
+                          </div>
+                        )}
+                        {data.personalInfo.location && (
+                          <div className="flex items-center text-slate-500 gap-2.5">
+                            <MapPin className="w-3.5 h-3.5" />
+                            <span className="text-sm font-medium">{data.personalInfo.location}</span>
+                          </div>
+                        )}
+                        {data.personalInfo.linkedIn && (
+                          <div className="flex items-center text-slate-500 gap-2.5">
+                            <Linkedin className="w-3.5 h-3.5" />
+                            <span className="text-sm font-medium">{data.personalInfo.linkedIn}</span>
+                          </div>
+                        )}
+                        {data.personalInfo.github && (
+                          <div className="flex items-center text-slate-500 gap-2.5">
+                            <Code className="w-3.5 h-3.5" />
+                            <span className="text-sm font-medium">{data.personalInfo.github}</span>
+                          </div>
+                        )}
+                        {data.personalInfo.website && (
+                          <div className="flex items-center text-slate-500 gap-2.5">
+                            <GlobeIcon className="w-3.5 h-3.5" />
+                            <span className="text-sm font-medium">{data.personalInfo.website}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {data.personalInfo.photo ? (
+                      <div className="relative w-28 h-28 rounded-2xl overflow-hidden shadow-sm shrink-0 border border-slate-100">
+                        <img src={data.personalInfo.photo} alt="Profile" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-28 h-28 rounded-2xl bg-slate-50 flex items-center justify-center border border-dashed border-slate-200 shrink-0">
+                        <User className="w-8 h-8 text-slate-300" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="personal-edit"
+                className="p-6 bg-white relative"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={personalTransition}
+              >
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Edit Personal Details</h2>
@@ -1102,8 +1125,11 @@ const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalIn
                 Done
               </Button>
             </div>
-          </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         );
+      }
 
       case 'summary':
         return (
@@ -3144,17 +3170,16 @@ const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalIn
     <div className="h-full">
       <div className="max-w-4xl mx-auto p-4">
         <div className="space-y-4">
-          {/* Always render Personal Information first as a special card */}
-          <motion.div
-            layout
+          {/* Always render Personal Information first as a special card — static container (no layout animation on edit toggle) */}
+          <div
             className={cn(
-              "bg-white border rounded-2xl overflow-hidden mb-6 transition-all",
-              isEditingPersonal ? "border-orange-500 shadow-xl ring-1 ring-orange-500/10" : "border-slate-200 shadow-sm hover:shadow-md transition-shadow",
+              "bg-white border rounded-2xl overflow-hidden mb-6 transition-[border-color,box-shadow,ring] duration-300 ease-out",
+              isEditingPersonal ? "border-orange-500 shadow-xl ring-1 ring-orange-500/10" : "border-slate-200 shadow-sm hover:shadow-md",
               data.hiddenSections?.includes('personalInfo') ? "opacity-50" : ""
             )}
           >
             {renderSectionContent('personalInfo')}
-          </motion.div>
+          </div>
 
           {/* Drag-and-drop for all sections except Personal Information */}
           <DragDropContext onDragEnd={handleDragEnd}>
@@ -3189,7 +3214,7 @@ const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalIn
                                 <motion.div
                                   onClick={() => toggleSection(sectionId)}
                                   className={cn(
-                                    "w-full p-5 text-left transition-colors flex items-center justify-between group cursor-pointer",
+                                    "w-full p-5 text-left transition-colors flex items-center gap-3 min-w-0 group cursor-pointer",
                                     isExpanded ? "bg-slate-50/50" : "hover:bg-slate-50"
                                   )}
                                   role="button"
@@ -3201,65 +3226,73 @@ const ResumeForm: React.FC<ResumeFormProps> = ({ selectedSections = ['personalIn
                                     }
                                   }}
                                 >
-                                  <div className="flex items-center space-x-4">
-                                    <div className="flex items-center gap-2">
-                                      <div {...dragProvided.dragHandleProps} className="p-1 hover:bg-slate-100 rounded text-slate-300 hover:text-slate-400 cursor-grab active:cursor-grabbing transition-colors">
-                                        <GripVertical className="w-5 h-5" />
-                                      </div>
-                                      <div
-                                        className={cn("p-2 rounded-lg transition-colors",
-                                          isExpanded ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-500"
-                                        )}
-                                      >
-                                        <Icon className="w-5 h-5" />
-                                      </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <div {...dragProvided.dragHandleProps} className="p-1 hover:bg-slate-100 rounded text-slate-300 hover:text-slate-400 cursor-grab active:cursor-grabbing transition-colors">
+                                      <GripVertical className="w-5 h-5" />
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                      {editingHeaderId === sectionId ? (
-                                        <Input
-                                          autoFocus
-                                          value={label}
-                                          onChange={(e) => handleSectionLabelChange(sectionId, e.target.value)}
-                                          onBlur={() => setEditingHeaderId(null)}
-                                          onKeyDown={(e) => e.key === 'Enter' && setEditingHeaderId(null)}
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="h-7 py-0 px-2 text-sm font-bold uppercase tracking-wide bg-slate-50 border-orange-200 focus-visible:ring-orange-500/20 w-48"
-                                        />
-                                      ) : (
-                                        <h3 className="font-bold text-slate-800 uppercase tracking-wide text-sm">
-                                          {label}
-                                        </h3>
+                                    <div
+                                      className={cn("p-2 rounded-lg transition-colors",
+                                        isExpanded ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-500"
                                       )}
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          className={cn(
-                                            "flex items-center gap-1.5 px-3 py-1 border rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors",
-                                            editingHeaderId === sectionId ? "border-orange-500 bg-orange-50 text-orange-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"
-                                          )}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingHeaderId(editingHeaderId === sectionId ? null : sectionId);
-                                          }}
-                                        >
-                                          <Edit2 className="w-3 h-3" />
-                                          {editingHeaderId === sectionId ? 'Save' : 'Edit Heading'}
-                                        </button>
-                                        <button
-                                          className={cn(
-                                            "p-1.5 rounded-md transition-colors",
-                                            data.hiddenSections?.includes(sectionId) ? "bg-slate-100 text-slate-600" : "hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                                          )}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleSectionVisibility(sectionId);
-                                          }}
-                                        >
-                                          {data.hiddenSections?.includes(sectionId) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                        </button>
-                                      </div>
+                                    >
+                                      <Icon className="w-5 h-5" />
                                     </div>
                                   </div>
-                                  {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+
+                                  <div className="flex-1 min-w-0 pr-1">
+                                    {editingHeaderId === sectionId ? (
+                                      <Input
+                                        autoFocus
+                                        value={label}
+                                        onChange={(e) => handleSectionLabelChange(sectionId, e.target.value)}
+                                        onBlur={() => setEditingHeaderId(null)}
+                                        onKeyDown={(e) => e.key === 'Enter' && setEditingHeaderId(null)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="h-8 py-0 px-2 text-sm font-bold uppercase tracking-wide bg-slate-50 border-orange-200 focus-visible:ring-orange-500/20 w-full max-w-md"
+                                      />
+                                    ) : (
+                                      <h3 className="font-bold text-slate-800 uppercase tracking-wide text-sm truncate">
+                                        {label}
+                                      </h3>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      title={editingHeaderId === sectionId ? 'Save heading' : 'Edit heading'}
+                                      aria-label={editingHeaderId === sectionId ? 'Save section heading' : 'Edit section heading'}
+                                      className={cn(
+                                        "inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors",
+                                        editingHeaderId === sectionId ? "bg-orange-50 text-orange-600" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                      )}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingHeaderId(editingHeaderId === sectionId ? null : sectionId);
+                                      }}
+                                    >
+                                      {editingHeaderId === sectionId ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title={data.hiddenSections?.includes(sectionId) ? 'Show in resume' : 'Hide from resume'}
+                                      aria-label="Toggle section visibility"
+                                      className={cn(
+                                        "inline-flex items-center justify-center h-9 w-9 rounded-lg transition-colors",
+                                        data.hiddenSections?.includes(sectionId) ? "bg-slate-100 text-slate-600" : "hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                                      )}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleSectionVisibility(sectionId);
+                                      }}
+                                    >
+                                      {data.hiddenSections?.includes(sectionId) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+
+                                  <div className="shrink-0 text-slate-400">
+                                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                  </div>
                                 </motion.div>
 
                                 <AnimatePresence>

@@ -127,15 +127,27 @@ export const useResumePagination = (
         const newPages: any[][] = [];
         let currentPage: any[] = [];
         let currentHeight = 0;
+        let skipNext = false;
 
-        items.forEach((item, index) => {
+        const isSectionOrEntryHeading = (it: any) =>
+            it.type === 'section-title' ||
+            (it.type === 'section-item' && it.content?._renderType === 'header');
+
+        for (let index = 0; index < items.length; index++) {
+            if (skipNext) {
+                skipNext = false;
+                continue;
+            }
+
+            const item = items[index];
+
             if (item.type === 'page-break') {
                 if (currentPage.length > 0) {
                     newPages.push(currentPage);
                 }
                 currentPage = [];
                 currentHeight = 0;
-                return;
+                continue;
             }
 
             const sectionHeight = itemHeights[item.id] || 0;
@@ -145,10 +157,7 @@ export const useResumePagination = (
             if (currentPage.length > 0) {
                 if (currentHeight + sectionHeight > USABLE_PAGE_HEIGHT) {
                     shouldBreak = true;
-                } else if (
-                    (item.type === 'section-title' || (item.type === 'section-item' && item.content?._renderType === 'header')) &&
-                    index < items.length - 1
-                ) {
+                } else if (isSectionOrEntryHeading(item) && index < items.length - 1) {
                     const nextItem = items[index + 1];
                     const nextHeight = itemHeights[nextItem.id] || 0;
 
@@ -162,11 +171,30 @@ export const useResumePagination = (
                 newPages.push(currentPage);
                 currentPage = [item];
                 currentHeight = sectionHeight;
+
+                /**
+                 * Avoid “widow” headings: after a page break, a section title (or job entry header)
+                 * was sometimes the only block on a page while the next block wrapped to the
+                 * following page (title + next measured taller than one page). If heading + next
+                 * still fit on an empty page, keep them together.
+                 */
+                const nextItem = items[index + 1];
+                const nextH = nextItem ? itemHeights[nextItem.id] || 0 : 0;
+                if (
+                    isSectionOrEntryHeading(item) &&
+                    nextItem &&
+                    nextItem.type !== 'page-break' &&
+                    sectionHeight + nextH <= USABLE_PAGE_HEIGHT
+                ) {
+                    currentPage.push(nextItem);
+                    currentHeight += nextH;
+                    skipNext = true;
+                }
             } else {
                 currentPage.push(item);
                 currentHeight += sectionHeight;
             }
-        });
+        }
 
         if (currentPage.length > 0) {
             newPages.push(currentPage);

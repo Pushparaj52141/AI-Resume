@@ -1,5 +1,5 @@
 /**
- * Root Layout for Resume AI Builder
+ * Root Layout for MyDreamResume
  * Next.js 14 App Router with dark mode support and metadata
  */
 
@@ -19,8 +19,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Resume AI Builder - Professional Resume Creation Tool',
-    template: '%s | Resume AI Builder'
+    default: 'MyDreamResume - Professional Resume Creation Tool',
+    template: '%s | MyDreamResume'
   },
   description: 'Create professional, ATS-optimized resumes with AI assistance. Advanced resume builder with real-time ATS scoring, multiple templates, and export options.',
   keywords: [
@@ -33,18 +33,18 @@ export const metadata: Metadata = {
     'resume templates',
     'career tools'
   ],
-  authors: [{ name: 'Resume AI Builder' }],
-  creator: 'Resume AI Builder',
+  authors: [{ name: 'MyDreamResume' }],
+  creator: 'MyDreamResume',
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    title: 'Resume AI Builder - Professional Resume Creation Tool',
+    title: 'MyDreamResume - Professional Resume Creation Tool',
     description: 'Create professional, ATS-optimized resumes with AI assistance. Advanced resume builder with real-time ATS scoring.',
-    siteName: 'Resume AI Builder',
+    siteName: 'MyDreamResume',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Resume AI Builder - Professional Resume Creation Tool',
+    title: 'MyDreamResume - Professional Resume Creation Tool',
     description: 'Create professional, ATS-optimized resumes with AI assistance.',
   },
   robots: {
@@ -89,18 +89,18 @@ export default function RootLayout({ children }: RootLayoutProps) {
           Skip to main content
         </a>
         
-        {/* Premium Background with Subtle Animated Gradients */}
+        {/* Premium background — fixed gradient */}
         <div className="fixed inset-0 -z-10">
           {/* Primary gradient background - much more subtle */}
           <div className="absolute inset-0 gradient-animated opacity-60" />
           
           {/* Floating orbs for visual depth - Toned Down */}
-          <div className="absolute top-0 left-0 w-96 h-96 rounded-full blur-3xl opacity-10 floating-animation" 
+          <div className="absolute top-0 left-0 w-96 h-96 rounded-full blur-3xl opacity-10"
                style={{ background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%)' }} />
-          <div className="absolute top-1/2 right-0 w-80 h-80 rounded-full blur-3xl opacity-15 floating-animation" 
-               style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fdba74 100%)', animationDelay: '2s' }} />
-          <div className="absolute bottom-0 left-1/3 w-72 h-72 rounded-full blur-3xl opacity-8 floating-animation" 
-               style={{ background: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 50%, #fb923c 100%)', animationDelay: '4s' }} />
+          <div className="absolute top-1/2 right-0 w-80 h-80 rounded-full blur-3xl opacity-15"
+               style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fdba74 100%)' }} />
+          <div className="absolute bottom-0 left-1/3 w-72 h-72 rounded-full blur-3xl opacity-8"
+               style={{ background: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 50%, #fb923c 100%)' }} />
           
           {/* Mesh gradient overlay - Very Subtle */}
           <div className="absolute inset-0 opacity-20">

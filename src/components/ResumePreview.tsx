@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useState, useEffect, useMemo, forwardRef, useImperativeHandle, useCallback } from 'react';
 import {
   Mail,
   Phone,
@@ -44,7 +44,7 @@ import { apiClient } from '@/lib/apiClient';
 import { extractProfessionalSummary } from '@/lib/resume-parser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_DESIGN } from '@/lib/defaults';
-import { flattenResumeData, distributeBlocksByLayout, ResumeBlock } from '@/lib/resume-layout-utils';
+import { flattenResumeData, distributeBlocksByLayout, ResumeBlock, getResumeSheetPixelSize } from '@/lib/resume-layout-utils';
 import { resumeColorCssVars } from '@/lib/design-colors';
 import { useResumePagination } from '@/hooks/useResumePagination';
 import { ResumePage } from '@/components/ResumePage';
@@ -83,8 +83,10 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
   showControls = true,
   thumbnailMode = false,
 }, ref) => {
-  const { data: storeData } = useResumeStore();
-  const data = propData || storeData;
+  /** When `propData` is provided, subscribe only to that reference so store edits don’t re-render this preview. */
+  const data = useResumeStore(
+    useCallback((s) => (propData !== undefined ? propData : s.data), [propData])
+  );
   const { isAuthenticated } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -109,8 +111,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
     }
   }, [design?.typography?.fontFamily]);
 
-  // --- Design Helpers ---
-  const getDesignStyles = () => {
+  // --- Design Helpers (memoized: same design → same object, fewer child reconciliations & PDF serialization work) ---
+  const designStyles = useMemo(() => {
     const { spacing, colors, typography, personalDetails } = design;
     const nameFf =
       personalDetails.nameFont === 'creative'
@@ -129,12 +131,12 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
       '--resume-name-size': personalDetails.nameSize === 'xs' ? '1.5rem' : personalDetails.nameSize === 's' ? '2rem' : personalDetails.nameSize === 'm' ? '2.5rem' : personalDetails.nameSize === 'l' ? '3rem' : '3.5rem',
       '--resume-name-font-weight': personalDetails.nameBold ? '800' : '400',
     } as React.CSSProperties;
-  };
+  }, [design]);
 
   const pageDimensions = useMemo(() => {
-    return design.languageRegion.pageFormat === 'A4'
-      ? { width: 794, height: 1123, name: 'A4' } // 210mm x 297mm at 96 DPI
-      : { width: 816, height: 1056, name: 'Letter' }; // 8.5in x 11in at 96 DPI
+    const format = design.languageRegion.pageFormat;
+    const { width, height } = getResumeSheetPixelSize(format);
+    return { width, height, name: format === 'Letter' ? 'Letter' as const : 'A4' as const };
   }, [design.languageRegion.pageFormat]);
 
   // --- PDF Generation Logic (Asynchronous) ---
@@ -185,21 +187,30 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         : styles;
 
       // 3. Serialize CSS variables from design
-      const designStyles = getDesignStyles() as Record<string, string>;
-      const cssVariables = Object.entries(designStyles)
+      const designStylesRecord = designStyles as Record<string, string>;
+      const cssVariables = Object.entries(designStylesRecord)
         .map(([key, value]) => `${key}: ${value}`)
         .join(';');
 
-      // 4. Construct full HTML snapshot (using finalStyles)
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${finalStyles}<style>body{background:white;margin:0;padding:0;width:794px;min-height:100vh}#resume-preview{width:100% !important;margin:0 !important;padding:0 !important;transform:none !important;box-shadow:none !important}.resume-page{transform:none !important;box-shadow:none !important;margin:0 !important;padding:var(--resume-margin-tb) var(--resume-margin-lr) !important;display:flex !important;flex-direction:column !important;page-break-after:always !important;break-after:page !important}${cssVariables ? `:root{${cssVariables}}` : ''}</style></head><body>${content}</body></html>`.trim();
+      // 4. Normalize export DOM: match on-screen `ResumePage` padding + full sheet size (zoom clip + symmetric PDF padding were shrinking / reflowing content).
+      const { width: sheetW, height: sheetH } = getResumeSheetPixelSize(design.languageRegion.pageFormat);
+      const pdfNormalizeCss = [
+        `body{background:white;margin:0;padding:0;width:${sheetW}px;min-height:100vh}`,
+        `#resume-preview{width:${sheetW}px !important;max-width:${sheetW}px !important;margin:0 !important;padding:0 !important;transform:none !important;box-shadow:none !important}`,
+        `.resume-page-clip{margin:0 !important;width:${sheetW}px !important;height:${sheetH}px !important;max-width:${sheetW}px !important;overflow:visible !important;background:transparent !important;flex-shrink:0 !important}`,
+        `.resume-page{transform:none !important;box-shadow:none !important;margin:0 !important;width:${sheetW}px !important;height:${sheetH}px !important;min-height:${sheetH}px !important;max-height:${sheetH}px !important;box-sizing:border-box !important;display:flex !important;flex-direction:column !important;padding-top:var(--resume-margin-tb) !important;padding-bottom:calc(var(--resume-margin-tb) + 20px + 10px) !important;padding-left:var(--resume-margin-lr) !important;padding-right:var(--resume-margin-lr) !important;page-break-after:always !important;break-after:page !important;background:white !important;overflow:hidden !important}`,
+      ].join('');
+      const rootVars = cssVariables ? `:root{${cssVariables}}` : '';
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${finalStyles}<style>${pdfNormalizeCss}${rootVars}</style></head><body>${content}</body></html>`.trim();
 
       // 5. Submit job to queue
+      const exportFileName = `Resume_${data.personalInfo.fullName?.replace(/\s+/g, '_') || 'Draft'}.pdf`;
       const response = await apiClient('/api/export-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           html,
-          fileName: `Resume_${data.personalInfo.fullName?.replace(/\s+/g, '_') || 'Draft'}.pdf`,
+          fileName: exportFileName,
           options: { format: design.languageRegion.pageFormat }
         }),
       });
@@ -211,6 +222,20 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(errorData.error || 'PDF generation failed');
       }
+      const contentType = response.headers.get('content-type') || '';
+      // Synchronous fallback returns raw PDF bytes to avoid base64 overhead.
+      if (contentType.includes('application/pdf')) {
+        const pdfBlob = await response.blob();
+        const url = window.URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        // Browser download filename is best-effort; server also sends Content-Disposition.
+        link.download = exportFileName || 'resume.pdf';
+        link.click();
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+
       const initialData = await response.json();
 
       let statusData = initialData;
@@ -346,15 +371,21 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
       );
     };
 
+    const headingGradientTextStyle: React.CSSProperties = {
+      backgroundImage: 'var(--resume-heading-gradient)',
+      WebkitBackgroundClip: 'text',
+      backgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      color: 'transparent',
+    };
+
     const SectionTitle = ({ children, icon }: { children: React.ReactNode, icon?: React.ReactNode }) => {
       const hs = design.typography.headings.style || 'classic';
       const cap = design.typography.headings.capitalization;
-      const headingColor = 'var(--resume-heading-color)';
       return (
         <h2
           className={cn(
-            'mb-3 flex items-center group transition-colors',
-            !isFirstOnPage ? 'mt-4' : 'mt-0',
+            'flex items-center group transition-colors',
             cap === 'none' && 'normal-case',
             cap === 'capitalize' && 'capitalize',
             cap === 'uppercase' && 'uppercase',
@@ -365,15 +396,19 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
             hs === 'bold' && 'border-0 pb-0 text-lg font-black tracking-wide uppercase',
           )}
           style={{
-            color: headingColor,
             borderColor: hs === 'classic' || hs === 'underline' ? `${design.colors.accent}55` : 'transparent',
+            // Template-tuned spacing between sections.
+            // Start slightly roomier than default, then scale gently with each template's `entrySpacing`.
+            // (User feedback: reduce spacing if it feels too large.)
+            marginTop: !isFirstOnPage ? 'calc(10px + (var(--resume-entry-spacing) * 0.06))' : '0px',
+            marginBottom: 'calc(7px + (var(--resume-entry-spacing) * 0.04))',
             ...(hs === 'pill'
               ? { backgroundColor: `color-mix(in srgb, ${design.colors.accent} 14%, transparent)` }
               : {}),
           }}
         >
           {icon && renderSectionIcon(icon)}
-          <span className="flex-1 min-w-0">
+          <span className="flex-1 min-w-0" style={headingGradientTextStyle}>
             {typeof children === 'string' ? (
               <span dangerouslySetInnerHTML={{ __html: decodeHtml(children) }} />
             ) : (
@@ -393,21 +428,21 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
           design.typography.headings.capitalization === 'none' && "normal-case",
           design.typography.headings.capitalization === 'capitalize' && "capitalize",
           design.typography.headings.capitalization === 'uppercase' && "uppercase",
-          isEliteNavy ? "bg-[#f1f5f9] text-[#1e293b]" : "bg-slate-50 text-slate-900 border-y border-slate-100/50"
+          isEliteNavy ? "bg-[#f1f5f9]" : "bg-slate-50 border-y border-slate-100/50"
         )}
           style={{
             fontSize: 'var(--resume-heading-size)',
           }}>
           {icon && (
-            <span className="mr-3 opacity-100 flex items-center">
+            <span className="mr-3 opacity-100 flex items-center" style={{ color: 'var(--resume-header-icon-color)' }}>
               {React.cloneElement(icon as React.ReactElement<any>, {
                 size: 14,
                 strokeWidth: 2.8,
-                className: "text-[#1e293b]"
+                className: "shrink-0"
               })}
             </span>
           )}
-          <span className="flex-none">
+          <span className="flex-none" style={headingGradientTextStyle}>
             {typeof children === 'string' ? (
               <span dangerouslySetInnerHTML={{ __html: decodeHtml(children) }} />
             ) : (
@@ -1183,9 +1218,9 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
         className={cn(
           'relative flex flex-col gap-0 m-0 transition-all duration-300 ease-in-out print:!m-0 print:!bg-transparent print:!p-0',
           showControls &&
-            'rounded-xl bg-slate-200/80 px-3 py-6 sm:px-5 sm:py-8 dark:bg-slate-800/60'
+            'rounded-xl bg-transparent px-3 py-6 sm:px-5 sm:py-8'
         )}
-        style={getDesignStyles()}
+        style={designStyles}
       >
         {!previewReady ? (
           <div
@@ -1330,7 +1365,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, ResumePreviewProps>(({
           paddingBottom: 'calc(var(--resume-margin-tb) + 20px + 10px)', // Match the display/pagination buffer exactly
           boxSizing: 'border-box',
           display: 'block',
-          ...getDesignStyles()
+          ...designStyles
         }}
       >
         {isTwoColumn ? (
@@ -1629,7 +1664,8 @@ const PersonalInfoModule = ({
       ) : (
         <header
           className={cn(
-            'mb-6 pb-2 flex gap-6 items-start',
+            // Reduce extra breathing room between top header and the first section.
+            'mb-5 pb-1 flex gap-6 items-start',
             personalDetails.align === 'center' && 'flex-col items-center text-center',
             personalDetails.align === 'right' && 'flex-row-reverse items-start text-right',
             isClassicHeaderInSidebar && 'flex-col gap-3'
@@ -1698,7 +1734,8 @@ const PersonalInfoModule = ({
 
             <div
               className={cn(
-                'mt-1',
+                // Slightly tighter spacing between job title and contact rows.
+                'mt-0.5',
                 arrangement === 'icon'
                   ? isClassicHeaderInSidebar
                     ? 'flex flex-col gap-y-2'

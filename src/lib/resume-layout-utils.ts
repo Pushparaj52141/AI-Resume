@@ -1,6 +1,15 @@
-
 import { ResumeData } from './types';
 import type { ResumeDesign } from './types';
+import { isPageBreakToken } from './page-break-utils';
+
+/** A4 / Letter at 96 DPI — must match preview pagination, `ResumePage`, and Puppeteer PDF. */
+export function getResumeSheetPixelSize(
+  pageFormat: 'A4' | 'Letter' | string | undefined
+): { width: number; height: number } {
+  return pageFormat === 'Letter'
+    ? { width: 816, height: 1056 }
+    : { width: 794, height: 1123 };
+}
 
 /** Sections that go in the sidebar for two-column / mix layouts */
 const SIDEBAR_SECTIONS = ['skills', 'languages', 'interests', 'certificates'];
@@ -414,10 +423,17 @@ export const flattenResumeData = (data: ResumeData, selectedSections: string[]):
         }
     };
 
-    selectedSections.forEach(sectionId => {
-        if (sectionId !== 'personalInfo') {
-            addSection(sectionId);
+    selectedSections.forEach((sectionId) => {
+        if (sectionId === 'personalInfo') return;
+        if (isPageBreakToken(sectionId)) {
+            blocks.push({
+                id: sectionId,
+                type: 'page-break',
+                sectionId,
+            });
+            return;
         }
+        addSection(sectionId);
     });
 
     return blocks;
@@ -441,6 +457,16 @@ export function distributeBlocksByLayout(
     const main: ResumeBlock[] = [];
 
     for (const block of blocks) {
+        /** Manual page break: flush both columns so the next section starts on a new sheet (two-column resumes). */
+        if (block.type === 'page-break') {
+            main.push(block);
+            sidebar.push({
+                ...block,
+                id: `${block.id}__col2`,
+            });
+            continue;
+        }
+
         const isHeader = block.sectionId === 'personalInfo';
         const isSidebarSection = SIDEBAR_SECTIONS.includes(block.sectionId);
 

@@ -236,20 +236,17 @@
     background: var(--gradient-aurora);
   }
 
-  /* Animated Gradients - Subtle Neutral with Warm Accents */
+  /* Page background — fixed gradient (no motion) */
   .gradient-animated {
-    background: linear-gradient(-45deg, #f8fafc, #f1f5f9, #fef3c7, #fed7aa);
-    background-size: 400% 400%;
-    animation: gradientShift 20s ease infinite;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 35%, #fef3c7 70%, #fed7aa 100%);
   }
 
   .gradient-text {
     background: var(--gradient-primary);
+    background-size: 100% 100%;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    background-size: 200% auto;
-    animation: gradientFlow 3s ease infinite;
   }
 
   /* Advanced Animations */

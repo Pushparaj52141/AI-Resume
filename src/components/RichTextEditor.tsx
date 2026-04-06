@@ -34,6 +34,27 @@ function richTextPropsEqual(prev: RichTextEditorProps, next: RichTextEditorProps
     );
 }
 
+/** Paste as plain text only — no fonts/colors/HTML from Word or the web. */
+function plainTextFromClipboard(e: React.ClipboardEvent): string {
+    const dt = e.clipboardData;
+    const plain = dt.getData('text/plain');
+    const normalizedPlain = plain.replace(/\u00a0/g, ' ').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (normalizedPlain.trim().length > 0) {
+        return normalizedPlain;
+    }
+    const html = dt.getData('text/html');
+    if (html) {
+        try {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const text = doc.body.textContent ?? '';
+            return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        } catch {
+            return '';
+        }
+    }
+    return '';
+}
+
 const RichTextEditor: React.FC<RichTextEditorProps> = ({
     value,
     onChange,
@@ -104,6 +125,33 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         syncValue();
         refreshFormatting();
     }, [syncValue, refreshFormatting]);
+
+    const handlePaste = useCallback(
+        (e: React.ClipboardEvent<HTMLDivElement>) => {
+            e.preventDefault();
+            const text = plainTextFromClipboard(e);
+            if (!text) return;
+            if (!editorRef.current) return;
+            editorRef.current.focus();
+            const ok = document.execCommand('insertText', false, text);
+            if (!ok) {
+                const sel = window.getSelection();
+                if (sel?.rangeCount) {
+                    const range = sel.getRangeAt(0);
+                    range.deleteContents();
+                    const node = document.createTextNode(text);
+                    range.insertNode(node);
+                    range.setStart(node, node.length);
+                    range.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            }
+            syncValue();
+            refreshFormatting();
+        },
+        [syncValue, refreshFormatting]
+    );
 
     const toolbarButtonClass = (active?: boolean) =>
         cn(
@@ -213,6 +261,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
                 <div
                     ref={editorRef}
                     contentEditable
+                    onPaste={handlePaste}
                     onInput={syncValue}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => {

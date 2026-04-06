@@ -19,7 +19,7 @@ function LoginForm() {
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/';
+  const redirect = searchParams.get('redirect') || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +50,9 @@ function LoginForm() {
           <div className="gradient-primary p-2.5 rounded-xl shadow-lg">
             <FileText className="h-6 w-6 text-white" />
           </div>
-          <span className="font-bold gradient-text text-xl">Resume AI Builder</span>
+          <span className="font-bold text-xl tracking-tight text-slate-900">
+            MyDream<span className="gradient-text">Resume</span>
+          </span>
         </Link>
 
         <div className="glass-card rounded-2xl p-8 border border-orange-200/30 shadow-xl">

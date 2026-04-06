@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
@@ -31,6 +31,7 @@ import {
     AlignRight,
     Link2,
     ImageIcon,
+    Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -50,6 +51,14 @@ import {
 } from '@/lib/flow-customize-options';
 
 import { useResumeStore } from '@/store/useResumeStore';
+import { loadGoogleFont } from '@/lib/utils';
+
+/** CSS font stack for picker preview (quoted family + generic fallback). */
+function previewFontFamily(font: string, category: 'sans' | 'serif' | 'mono'): string {
+    const safe = font.replace(/"/g, '');
+    const fallback = category === 'serif' ? 'serif' : category === 'mono' ? 'monospace' : 'sans-serif';
+    return `"${safe}", ${fallback}`;
+}
 
 function cloneDesign(d: ResumeDesign): ResumeDesign {
     return structuredClone(d);
@@ -144,11 +153,33 @@ interface CustomizeFormProps {
 }
 
 const CustomizeForm: React.FC<CustomizeFormProps> = ({ onAddSections }) => {
-    const { data, setResumeData, updateDesign: storeUpdateDesign, setSelectedSections } = useResumeStore();
+    const data = useResumeStore((s) => s.data);
+    const setResumeData = useResumeStore((s) => s.setResumeData);
+    const storeUpdateDesign = useResumeStore((s) => s.updateDesign);
+    const setSelectedSections = useResumeStore((s) => s.setSelectedSections);
     const design = data.design || DEFAULT_DESIGN;
     const [activeTab, setActiveTab] = useState('layout');
     const [pastDesign, setPastDesign] = useState<ResumeDesign[]>([]);
     const [futureDesign, setFutureDesign] = useState<ResumeDesign[]>([]);
+    const [fontSearchQuery, setFontSearchQuery] = useState('');
+
+    const fontCategory = (design.typography.fontCategory ?? 'sans') as keyof typeof FONT_STACK;
+
+    const filteredFonts = useMemo(() => {
+        const list = FONT_STACK[fontCategory];
+        const q = fontSearchQuery.trim().toLowerCase();
+        if (!q) return list;
+        return list.filter((name) => name.toLowerCase().includes(q));
+    }, [fontCategory, fontSearchQuery]);
+
+    useEffect(() => {
+        setFontSearchQuery('');
+    }, [fontCategory]);
+
+    useEffect(() => {
+        if (activeTab !== 'typeface') return;
+        FONT_STACK[fontCategory].forEach((name) => loadGoogleFont(name));
+    }, [activeTab, fontCategory]);
 
     const selectedSections = data.selectedSections || ['personalInfo', 'summary', 'experience', 'education', 'skills'];
 
@@ -650,7 +681,7 @@ const CustomizeForm: React.FC<CustomizeFormProps> = ({ onAddSections }) => {
                                                     type="button"
                                                     onClick={() => updateDesign('typography', 'fontCategory', cat)}
                                                     className={cn(
-                                                        'py-2.5 rounded-xl border-2 text-[10px] font-bold uppercase transition-all',
+                                                        'py-2.5 rounded-xl border-2 text-[10px] font-bold uppercase transition-all flex items-center justify-center text-center',
                                                         (design.typography.fontCategory ?? 'sans') === cat
                                                             ? 'border-primary bg-primary/5 text-primary shadow-sm'
                                                             : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
@@ -660,23 +691,40 @@ const CustomizeForm: React.FC<CustomizeFormProps> = ({ onAddSections }) => {
                                                 </button>
                                             ))}
                                         </div>
+                                        <div className="relative mb-3">
+                                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                                            <Input
+                                                type="search"
+                                                value={fontSearchQuery}
+                                                onChange={(e) => setFontSearchQuery(e.target.value)}
+                                                placeholder="Search fonts…"
+                                                aria-label="Search fonts"
+                                                className="h-10 rounded-xl border-slate-200 bg-slate-50/90 pl-9 pr-3 text-sm placeholder:text-slate-400 focus-visible:ring-orange-500/20"
+                                            />
+                                        </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[280px] overflow-y-auto pr-1">
-                                            {FONT_STACK[(design.typography.fontCategory ?? 'sans') as keyof typeof FONT_STACK].map((font) => (
-                                                <button
-                                                    key={font}
-                                                    type="button"
-                                                    onClick={() => updateDesign('typography', 'fontFamily', font)}
-                                                    className={cn(
-                                                        'px-2 py-2 rounded-xl border-2 text-xs transition-all text-left truncate',
-                                                        design.typography.fontFamily === font
-                                                            ? 'border-primary bg-primary/5 text-primary shadow-sm font-bold'
-                                                            : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                                                    )}
-                                                    style={{ fontFamily: font }}
-                                                >
-                                                    {font}
-                                                </button>
-                                            ))}
+                                            {filteredFonts.length === 0 ? (
+                                                <p className="col-span-2 sm:col-span-3 py-8 text-center text-sm text-slate-500">
+                                                    No fonts match &ldquo;{fontSearchQuery.trim()}&rdquo;
+                                                </p>
+                                            ) : (
+                                                filteredFonts.map((font) => (
+                                                    <button
+                                                        key={font}
+                                                        type="button"
+                                                        onClick={() => updateDesign('typography', 'fontFamily', font)}
+                                                        className={cn(
+                                                            'min-h-[2.75rem] w-full px-2 py-2 rounded-xl border-2 text-xs transition-all text-center leading-tight flex items-center justify-center break-words hyphens-auto',
+                                                            design.typography.fontFamily === font
+                                                                ? 'border-primary bg-primary/5 text-primary shadow-sm font-semibold'
+                                                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                                                        )}
+                                                        style={{ fontFamily: previewFontFamily(font, fontCategory) }}
+                                                    >
+                                                        {font}
+                                                    </button>
+                                                ))
+                                            )}
                                         </div>
                                     </CustomizePanelCard>
 

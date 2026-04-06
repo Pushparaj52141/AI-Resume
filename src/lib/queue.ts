@@ -1,42 +1,33 @@
-import { Queue, ConnectionOptions } from 'bullmq';
+import { getRedisConnection } from '@/lib/redis-connection';
 
-const REDIS_URL = process.env.REDIS_URL;
+export const isQueueEnabled = !!process.env.REDIS_URL;
 
-export const isQueueEnabled = !!REDIS_URL;
+let queuePromise: Promise<import('bullmq').Queue> | null = null;
 
-const getRedisConnection = (): ConnectionOptions => {
-  if (!REDIS_URL) {
-    return { host: 'localhost', port: 6379 };
+/**
+ * Lazy-loads bullmq only when REDIS_URL is set so Next.js / Turbopack does not
+ * bundle or externalize ioredis for routes that only use sync PDF generation.
+ */
+export function getPdfQueue(): Promise<import('bullmq').Queue> {
+  if (!isQueueEnabled) {
+    return Promise.reject(new Error('PDF queue requires REDIS_URL'));
   }
-  
-  try {
-    const redisUrl = new URL(REDIS_URL);
-    return {
-      host: redisUrl.hostname,
-      port: parseInt(redisUrl.port),
-      password: redisUrl.password,
-      username: redisUrl.username,
-      maxRetriesPerRequest: null,
-    };
-  } catch (e) {
-    console.error('Invalid REDIS_URL:', REDIS_URL);
-    return { host: 'localhost', port: 6379 };
-  }
-};
-
-export const connection = getRedisConnection();
-
-export const pdfQueue = isQueueEnabled 
-  ? new Queue('pdf-generation', {
-      connection,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
+  if (!queuePromise) {
+    queuePromise = (async () => {
+      const { Queue } = await import('bullmq');
+      return new Queue('pdf-generation', {
+        connection: getRedisConnection(),
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
+          removeOnComplete: true,
+          removeOnFail: false,
         },
-        removeOnComplete: true,
-        removeOnFail: false,
-      },
-    })
-  : null as any; // Cast to any to maintain type compatibility in routes if needed
+      });
+    })();
+  }
+  return queuePromise;
+}

@@ -3,7 +3,7 @@ import createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import { pdfRateLimiter } from '@/lib/rateLimiter';
 import { getUserIdFromRequest } from '@/lib/auth/withAuth';
-import { pdfQueue, isQueueEnabled } from '@/lib/queue';
+import { getPdfQueue, isQueueEnabled } from '@/lib/queue';
 import { generatePDF } from '@/lib/pdf-utils';
 
 export const runtime = 'nodejs';
@@ -46,18 +46,18 @@ export async function POST(req: NextRequest) {
     if (!isQueueEnabled) {
       console.log('Redis is not configured. Falling back to synchronous PDF generation.');
       const pdfBuffer = await generatePDF(cleanHtml, options);
-      const base64 = pdfBuffer.toString('base64');
-      
-      return NextResponse.json({ 
-        success: true, 
-        state: 'completed',
-        result: { success: true, base64, fileName: fileName || 'resume.pdf' },
-        message: 'PDF generated synchronously (Redis fallback)' 
+
+      const resolvedFileName = fileName || 'resume.pdf';
+      return new NextResponse(pdfBuffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${resolvedFileName.replace(/"/g, '')}"`,
+        },
       });
     }
 
-    // Enqueue PDF generation job
-    const job = await pdfQueue.add('generate-pdf', {
+    const queue = await getPdfQueue();
+    const job = await queue.add('generate-pdf', {
       html: cleanHtml,
       fileName: fileName || 'resume.pdf',
       options: options || { format: 'A4' },
@@ -94,7 +94,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const job = await pdfQueue.getJob(jobId);
+    const queue = await getPdfQueue();
+    const job = await queue.getJob(jobId);
     
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });

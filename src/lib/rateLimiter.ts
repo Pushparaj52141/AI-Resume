@@ -5,9 +5,15 @@ const isConfigured =
   process.env.UPSTASH_REDIS_REST_URL && 
   process.env.UPSTASH_REDIS_REST_TOKEN;
 
+/** Avoid spamming the terminal on every cold import in dev (same message, no new info). */
+const warnedNoRedis = new Set<string>();
+
 const createRatelimiter = (limit: number, window: Duration, prefix: string) => {
   if (!isConfigured) {
-    console.warn(`Upstash Redis not configured for ${prefix}. Rate limiting is disabled.`);
+    if (!warnedNoRedis.has(prefix)) {
+      warnedNoRedis.add(prefix);
+      console.warn(`Upstash Redis not configured for ${prefix}. Rate limiting is disabled.`);
+    }
     return {
       limit: async () => ({ success: true, reset: Date.now() + 60000 }),
     } as unknown as Ratelimit;

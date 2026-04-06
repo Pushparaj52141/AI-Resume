@@ -20,7 +20,9 @@ export default function Footer() {
             <div className="p-2 rounded-lg gradient-primary">
               <FileText className="h-5 w-5 text-white" />
             </div>
-            <span className="font-bold gradient-text">Resume AI Builder</span>
+            <span className="font-bold text-slate-900">
+              MyDream<span className="gradient-text">Resume</span>
+            </span>
           </Link>
 
           <nav className="flex items-center gap-6" aria-label="Footer navigation">
@@ -33,7 +35,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 pt-8 border-t border-orange-200/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-muted-foreground">© 2025 Resume AI Builder. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">© 2026 MyDreamResume. All rights reserved.</p>
         </div>
       </div>
     </footer>

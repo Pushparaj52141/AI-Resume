@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { connection } from '../lib/queue';
+import { connection } from '../lib/redis-connection';
 import { generatePDF } from '../lib/pdf-utils';
 
 export const pdfWorker = new Worker(

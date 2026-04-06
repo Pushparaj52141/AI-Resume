@@ -27,14 +27,20 @@ async function refreshAccessToken(): Promise<boolean> {
             });
 
             if (response.ok) {
-                console.log('Token refreshed successfully');
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('Token refreshed successfully');
+                }
                 return true;
             }
 
-            console.error('Token refresh failed:', response.status);
+            if (process.env.NODE_ENV === 'development') {
+                console.error('Token refresh failed:', response.status);
+            }
             return false;
         } catch (error) {
-            console.error('Token refresh error:', error);
+            if (process.env.NODE_ENV === 'development') {
+                console.error('Token refresh error:', error);
+            }
             return false;
         } finally {
             isRefreshing = false;
@@ -68,12 +74,13 @@ export async function apiClient(
 
     // If we get a 401 and haven't retried yet, try to refresh the token
     if (response.status === 401 && retryOnUnauth) {
-        console.log('Received 401, attempting token refresh...');
+        const dev = process.env.NODE_ENV === 'development';
+        if (dev) console.log('Received 401, attempting token refresh...');
 
         const refreshed = await refreshAccessToken();
 
         if (refreshed) {
-            console.log('Retrying original request after token refresh...');
+            if (dev) console.log('Retrying original request after token refresh...');
             // Retry the original request with the new token
             return fetch(input, {
                 ...options,
@@ -81,14 +88,14 @@ export async function apiClient(
             }).then(retryResponse => {
                 // If still 401 after refresh, redirect to login
                 if (retryResponse.status === 401) {
-                    console.log('Still unauthorized after refresh, redirecting to login...');
+                    if (dev) console.log('Still unauthorized after refresh, redirecting to login...');
                     handleUnauthorized();
                 }
                 return retryResponse;
             });
         } else {
             // Refresh failed, redirect to login
-            console.log('Token refresh failed, redirecting to login...');
+            if (dev) console.log('Token refresh failed, redirecting to login...');
             handleUnauthorized();
         }
     }

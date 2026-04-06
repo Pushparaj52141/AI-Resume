@@ -29,7 +29,7 @@ export const config = {
     margins: { top: 20, bottom: 20, left: 20, right: 20 }
   },
   app: {
-    name: process.env.NEXT_PUBLIC_APP_NAME || 'Resume AI Builder',
+    name: process.env.NEXT_PUBLIC_APP_NAME || 'MyDreamResume',
     version: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
     description: 'AI-powered resume builder with ATS optimization'
   }

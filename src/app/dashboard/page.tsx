@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -35,9 +36,11 @@ import {
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import ResumePreview from '@/components/ResumePreview';
-import atsOptimizedResume from '@/lib/seed/atsOptimizedResume';
-import creativeShowcaseResume from '@/lib/seed/creativeShowcaseResume';
+const ResumePreview = dynamic(() => import('@/components/ResumePreview'), {
+    ssr: false,
+    // Dashboard thumbnails should not block first paint.
+    loading: () => null,
+});
 import { TEMPLATE_SPECS } from '@/lib/template-design-spec';
 
 interface Resume {
@@ -55,7 +58,7 @@ interface Resume {
 
 export default function DashboardPage() {
     const router = useRouter();
-    const { user, logout } = useAuth();
+    const { user, logout, loading: authLoading, initialized } = useAuth();
     const [resumes, setResumes] = useState<Resume[]>([]);
     const [loading, setLoading] = useState(true);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -64,8 +67,12 @@ export default function DashboardPage() {
     const [selectedPersona, setSelectedPersona] = useState<string>('all');
 
     useEffect(() => {
+        // Avoid triggering a duplicate token refresh inside `apiClient` while AuthProvider is still initializing.
+        if (!initialized || authLoading) return;
+        if (!user) return;
         fetchResumes();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialized, authLoading, user]);
 
     const handleLogout = async () => {
         try {
@@ -85,9 +92,8 @@ export default function DashboardPage() {
             const response = await apiClient('/api/resumes');
             if (response.ok) {
                 const data = await response.json();
-                setResumes(data.sort((a: Resume, b: Resume) =>
-                    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-                ));
+                // API already returns newest-first (updatedAt desc); skip redundant client sort.
+                setResumes(data);
             }
         } catch (error) {
             console.error('Failed to fetch resumes:', error);
@@ -136,8 +142,8 @@ export default function DashboardPage() {
                             <div className="gradient-primary p-2 rounded-lg shadow-md group-hover:shadow-lg transition-all">
                                 <FileText className="h-5 w-5 text-white" />
                             </div>
-                            <span className="font-bold text-xl tracking-tight hidden sm:block">
-                                Resume<span className="gradient-text">AI</span>
+                            <span className="font-bold text-xl tracking-tight hidden sm:block text-slate-900">
+                                MyDream<span className="gradient-text">Resume</span>
                             </span>
                         </Link>
 
@@ -166,7 +172,7 @@ export default function DashboardPage() {
                             onClick={handleLogout}
                             className="text-slate-500 hover:text-red-600 hover:bg-red-50"
                         >
-                            Sign out
+                            Logout
                         </Button>
                     </div>
                 </div>
@@ -522,10 +528,7 @@ function TemplateOption({ template, onSelect }: { template: Template, onSelect: 
     const [inView, setInView] = useState(false);
 
     const isCreative = TEMPLATE_SPECS.find((s) => s.id === template.id)?.persona === 'creative';
-    const previewData = {
-        ...(isCreative ? creativeShowcaseResume : atsOptimizedResume),
-        design: template.design
-    };
+    const [previewBase, setPreviewBase] = useState<any | null>(null);
 
     useEffect(() => {
         const el = cardRef.current;
@@ -543,6 +546,25 @@ function TemplateOption({ template, onSelect }: { template: Template, onSelect: 
         return () => io.disconnect();
     }, [template.id]);
 
+    // Lazy-load heavy preview seed data only when the card is about to become visible.
+    useEffect(() => {
+        if (!inView) return;
+        let cancelled = false;
+
+        (async () => {
+            const mod = isCreative
+                ? await import('@/lib/seed/creativeShowcaseResume')
+                : await import('@/lib/seed/atsOptimizedResume');
+
+            if (cancelled) return;
+            setPreviewBase(mod.default);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [inView, isCreative, template.id]);
+
     return (
         <div className="group flex flex-col gap-4 hover:-translate-y-1 transition-transform duration-200">
             <div
@@ -550,7 +572,7 @@ function TemplateOption({ template, onSelect }: { template: Template, onSelect: 
                 className="relative aspect-[210/297] bg-[#f8f9fa] rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:border-slate-300 transition-all cursor-pointer group/card flex justify-center"
                 onClick={() => onSelect(template.id)}
             >
-                {inView ? (
+                {inView && previewBase ? (
                     <div className="absolute inset-0 pointer-events-none select-none flex justify-center">
                         <div className="origin-top mt-4 shadow-2xl" style={{
                             width: '794px',
@@ -558,7 +580,7 @@ function TemplateOption({ template, onSelect }: { template: Template, onSelect: 
                             transform: 'scale(0.3)',
                         }}>
                             <ResumePreview
-                                data={previewData}
+                                data={{ ...previewBase, design: template.design }}
                                 selectedSections={isCreative ? ['personalInfo', 'summary', 'experience', 'education', 'skills', 'projects', 'languages'] : ['personalInfo', 'summary', 'experience', 'education', 'skills']}
                                 isSaved={true}
                                 showControls={false}

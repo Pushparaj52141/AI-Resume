@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  /** Tree-shake icon and animation barrels so each route pulls only used modules (smaller JS, faster parse). */
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion'],
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -43,11 +47,26 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+const sentryBuildOptions = {
   org: "resume-ai",
   project: "javascript-nextjs",
   silent: !process.env.CI,
   widenClientFileUpload: true,
   disableLogger: true,
   automaticVercelMonitors: true,
-});
+} as const;
+
+const config = withSentryConfig(nextConfig, sentryBuildOptions);
+
+/**
+ * Sentry adds `ioredis` to serverExternalPackages for tracing. BullMQ imports
+ * `ioredis/built/utils`, which Node cannot resolve when ioredis is externalized
+ * under Turbopack — bundle ioredis instead (Sentry Redis auto-instrumentation may be reduced).
+ */
+if (Array.isArray(config.serverExternalPackages)) {
+  config.serverExternalPackages = config.serverExternalPackages.filter(
+    (pkg) => pkg !== "ioredis"
+  );
+}
+
+export default config;

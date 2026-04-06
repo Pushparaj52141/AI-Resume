@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Landing Page for Resume AI Builder
+ * Landing page for MyDreamResume
  * Above-the-fold stays static; below-the-fold is code-split for faster first paint.
  */
 

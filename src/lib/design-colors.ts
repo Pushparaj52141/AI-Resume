@@ -105,7 +105,10 @@ export function resumeColorCssVars(colors: ResumeDesign['colors']): Record<strin
   }
   vars['--resume-name-color'] = resolveDesignColor(colors, 'name');
   vars['--resume-job-title-color'] = resolveDesignColor(colors, 'jobTitle');
-  vars['--resume-heading-color'] = resolveDesignColor(colors, 'headings');
+  const headingSolid = resolveDesignColor(colors, 'headings');
+  vars['--resume-heading-color'] = headingSolid;
+  /** Section titles in preview/PDF — gradient from heading color into a text-tinted mix (replaces flat accent/pink blocks). */
+  vars['--resume-heading-gradient'] = `linear-gradient(105deg, ${headingSolid} 0%, color-mix(in srgb, ${headingSolid} 42%, ${colors.text}) 100%)`;
   vars['--resume-header-icon-color'] = resolveDesignColor(colors, 'headerIcons');
   vars['--resume-dots-color'] = resolveDesignColor(colors, 'dotsBarsBubbles');
   vars['--resume-date-color'] = resolveDesignColor(colors, 'dates');

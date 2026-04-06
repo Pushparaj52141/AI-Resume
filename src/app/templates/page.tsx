@@ -3,7 +3,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, memo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FileText, ChevronRight } from 'lucide-react';
+import { FileText, ChevronRight, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TEMPLATES, type Template } from '@/lib/templates';
 import { TEMPLATE_SPECS } from '@/lib/template-design-spec';
@@ -149,9 +149,22 @@ export default function TemplatesPage() {
     router.push(`/builder?template=${templateId}`);
   };
 
+  const backHref = user ? '/dashboard' : '/';
+  const backLabel = user ? 'Back to dashboard' : 'Back to home';
+
   return (
     <div className="min-h-screen px-4 py-12 bg-gradient-to-b from-slate-100 via-background to-slate-100/80">
       <div className="mx-auto w-full min-w-0 max-w-7xl">
+        <div className="mb-6">
+          <Button variant="outline" size="sm" asChild className="rounded-xl border-slate-200 bg-white/80 text-slate-700 hover:bg-white hover:text-slate-900 shadow-sm">
+            <Link href={backHref} className="inline-flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+              <span>Back</span>
+              <span className="sr-only">{` — ${backLabel}`}</span>
+            </Link>
+          </Button>
+        </div>
+
         <Link
           href="/"
           className="flex items-center gap-3 justify-center mb-8 hover:opacity-90"
@@ -159,7 +172,9 @@ export default function TemplatesPage() {
           <div className="gradient-primary p-2.5 rounded-xl shadow-lg">
             <FileText className="h-6 w-6 text-white" />
           </div>
-          <span className="font-bold gradient-text text-xl">Resume AI Builder</span>
+          <span className="font-bold text-xl tracking-tight text-slate-900">
+            MyDream<span className="gradient-text">Resume</span>
+          </span>
         </Link>
 
         <div className="mb-10 text-center">
@@ -241,7 +256,7 @@ export default function TemplatesPage() {
               </div>
             </div>
 
-            <div className="flex flex-1 justify-center overflow-y-auto bg-[#c5cad3]/50 px-3 py-6 sm:px-6 sm:py-8">
+            <div className="flex flex-1 justify-center overflow-y-auto bg-transparent px-3 py-6 sm:px-6 sm:py-8">
               <div className="pointer-events-none flex w-full max-w-4xl origin-top scale-[0.52] select-none transition-transform sm:scale-[0.62] md:scale-[0.72] lg:scale-[0.8]">
                 <ResumePreview
                   data={userResumes[previewTemplate.id] || {
