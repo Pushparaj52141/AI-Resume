@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -16,7 +17,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, googleAuth } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/dashboard';
@@ -26,6 +27,19 @@ function LoginForm() {
     setError('');
     setLoading(true);
     const result = await login(email, password);
+    setLoading(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    router.push(redirect);
+    router.refresh();
+  };
+
+  const handleGoogleAuth = async (credential: string) => {
+    setError('');
+    setLoading(true);
+    const result = await googleAuth(credential);
     setLoading(false);
     if (result.error) {
       setError(result.error);
@@ -56,10 +70,19 @@ function LoginForm() {
         </Link>
 
         <div className="glass-card rounded-2xl p-8 border border-orange-200/30 shadow-xl">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Sign in</h1>
-          <p className="text-muted-foreground mb-6">
-            Enter your credentials to access your resumes.
-          </p>
+          <h1 className="mb-6 text-center text-2xl font-bold text-foreground">Sign in</h1>
+
+          <GoogleAuthButton
+            mode="signin"
+            onCredential={handleGoogleAuth}
+            onError={(message) => setError(message)}
+          />
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs font-medium tracking-wide text-muted-foreground">OR EMAIL</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

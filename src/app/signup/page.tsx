@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -17,9 +18,10 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signup } = useAuth();
+  const { signup, googleAuth } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,10 +38,23 @@ export default function SignupPage() {
     router.refresh();
   };
 
+  const handleGoogleAuth = async (credential: string) => {
+    setError('');
+    setLoading(true);
+    const result = await googleAuth(credential);
+    setLoading(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    router.push('/dashboard');
+    router.refresh();
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-gradient-to-b from-background to-orange-50/30">
       <motion.div
-        className="w-full max-w-md"
+        className="w-full max-w-[30rem]"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -57,18 +72,27 @@ export default function SignupPage() {
         </Link>
 
         <div className="glass-card rounded-2xl p-8 border border-orange-200/30 shadow-xl">
-          <h1 className="text-2xl font-bold text-foreground mb-2">Create account</h1>
-          <p className="text-muted-foreground mb-6">
-            Sign up to save and manage your resumes.
-          </p>
+          <h1 className="mb-6 text-center text-2xl font-bold text-foreground">Create Account</h1>
+
+          <GoogleAuthButton
+            mode="signup"
+            onCredential={handleGoogleAuth}
+            onError={(message) => setError(message)}
+          />
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs font-medium tracking-wide text-muted-foreground">OR EMAIL</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">Full Name</Label>
               <Input
                 id="name"
                 type="text"
-                placeholder="Your name"
+                placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -94,9 +118,11 @@ export default function SignupPage() {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder="Create a password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setIsPasswordFocused(true)}
+                  onBlur={() => setIsPasswordFocused(false)}
                   required
                   minLength={8}
                   className="pr-10"
@@ -110,29 +136,31 @@ export default function SignupPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <div className="mt-2 space-y-1.5">
-                {[
-                  { label: 'At least 8 characters', met: password.length >= 8 },
-                  { label: 'One uppercase letter', met: /[A-Z]/.test(password) },
-                  { label: 'One lowercase letter', met: /[a-z]/.test(password) },
-                  { label: 'One number', met: /[0-9]/.test(password) },
-                  { label: 'One special character', met: /[^A-Za-z0-9]/.test(password) },
-                ].map((rule) => (
-                  <div
-                    key={rule.label}
-                    className={`flex items-center gap-2 text-xs ${
-                      rule.met ? 'text-green-600' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {rule.met ? (
-                      <Check className="h-3.5 w-3.5 shrink-0" />
-                    ) : (
-                      <Circle className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                    )}
-                    <span>{rule.label}</span>
-                  </div>
-                ))}
-              </div>
+              {isPasswordFocused ? (
+                <div className="mt-2 space-y-1.5 rounded-lg border border-border/60 bg-background/40 p-3">
+                  {[
+                    { label: 'At least 8 characters', met: password.length >= 8 },
+                    { label: 'One uppercase letter', met: /[A-Z]/.test(password) },
+                    { label: 'One lowercase letter', met: /[a-z]/.test(password) },
+                    { label: 'One number', met: /[0-9]/.test(password) },
+                    { label: 'One special character', met: /[^A-Za-z0-9]/.test(password) },
+                  ].map((rule) => (
+                    <div
+                      key={rule.label}
+                      className={`flex items-center gap-2 text-xs ${
+                        rule.met ? 'text-green-600' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {rule.met ? (
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <Circle className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                      )}
+                      <span>{rule.label}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div>
               <Label htmlFor="confirmPassword">Confirm password</Label>
@@ -166,14 +194,14 @@ export default function SignupPage() {
               className="w-full gradient-primary text-white font-semibold py-6"
               disabled={loading}
             >
-              {loading ? 'Creating account...' : 'Sign up'}
+              {loading ? 'Creating account...' : 'Create Account'}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link href="/login" className="text-primary font-medium hover:underline">
-              Sign in
+              Log in
             </Link>
           </p>
         </div>

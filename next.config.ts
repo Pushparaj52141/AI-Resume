@@ -68,5 +68,11 @@ if (Array.isArray(config.serverExternalPackages)) {
     (pkg) => pkg !== "ioredis"
   );
 }
+/** Classic pdf-parse (v1) + mammoth: avoid Turbopack bundling issues with pdfjs workers. */
+config.serverExternalPackages = [
+  ...(config.serverExternalPackages ?? []),
+  "pdf-parse",
+  "mammoth",
+];
 
 export default config;

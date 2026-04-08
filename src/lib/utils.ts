@@ -202,6 +202,12 @@ let saveLock: Promise<any> | null = null;
  * Save resume data to MongoDB API
  */
 export async function saveResumeDataToDB(data: ResumeData): Promise<string | null> {
+  // Avoid backend 400s while the user is still filling required fields.
+  // Local storage save still happens via saveResumeData().
+  if (!data.personalInfo?.fullName?.trim() || !isValidEmail(data.personalInfo?.email || '')) {
+    return null;
+  }
+
   // If a save is already in progress, wait for it to complete
   if (saveLock) {
     await saveLock;

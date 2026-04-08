@@ -46,7 +46,7 @@ import { toast } from 'sonner';
 import '@/components/bottom-dock-panel.css';
 
 import type { ResumeData } from '@/lib/types';
-import { loadResumeData, saveResumeData, clearResumeData, loadResumeDataFromDB, cn } from '@/lib/utils';
+import { loadResumeData, saveResumeData, clearResumeData, loadResumeDataFromDB, cn, isValidEmail } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { trackResumeChanges, type ChangesSummary } from '@/lib/change-tracker';
 import { DEFAULT_DESIGN } from '@/lib/defaults';
@@ -207,6 +207,7 @@ function BuilderPageContent() {
     const loadData = async () => {
       const resumeId = searchParams.get('id');
       const templateId = searchParams.get('template');
+      const imported = searchParams.get('imported') === '1';
       const template = templateId ? getTemplateById(templateId) : undefined;
 
       const applyDesign = (data: ResumeData) => {
@@ -222,6 +223,17 @@ function BuilderPageContent() {
           design
         };
       };
+
+      // Imported local resume should win over DB "last resume" selection.
+      if (imported) {
+        const localData = loadResumeData(templateId || undefined) || loadResumeData();
+        if (localData) {
+          setResumeData(applyDesign(localData));
+          lastLoadedRef.current = urlParams;
+          setInitialLoad(false);
+          return;
+        }
+      }
 
       // Try loading from MongoDB first
       const dbData = await loadResumeDataFromDB(templateId || undefined, resumeId || undefined);
@@ -256,7 +268,7 @@ function BuilderPageContent() {
 
   // Auto-save functionality
   useEffect(() => {
-    if (autoSave && resumeData.personalInfo.fullName) {
+    if (autoSave && resumeData.personalInfo.fullName && isValidEmail(resumeData.personalInfo.email)) {
       const timeoutId = setTimeout(() => {
         // Include selectedSections in auto-save
         const dataToSave = { ...resumeData, selectedSections };

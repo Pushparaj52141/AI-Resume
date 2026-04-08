@@ -63,6 +63,7 @@ export async function ensureAuthIndexes() {
   const resumes = db.collection('resumes');
   
   await users.createIndex({ email: 1 }, { unique: true });
+  await users.createIndex({ googleId: 1 }, { unique: true, sparse: true });
   await blacklist.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   
   // New index for optimized resume listing

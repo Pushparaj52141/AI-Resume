@@ -13,6 +13,7 @@ interface AuthContextType {
   loading: boolean;
   initialized: boolean;
   login: (email: string, password: string) => Promise<{ error?: string }>;
+  googleAuth: (credential: string) => Promise<{ error?: string }>;
   signup: (name: string, email: string, password: string, confirmPassword: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -111,6 +112,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const googleAuth = useCallback(async (credential: string): Promise<{ error?: string }> => {
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { error: data.error || 'Google sign-in failed' };
+      }
+      setUser(data.user);
+      return {};
+    } catch (e) {
+      return { error: 'Network error' };
+    }
+  }, []);
+
   const signup = useCallback(
     async (
       name: string,
@@ -154,12 +174,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       initialized,
       login,
+      googleAuth,
       signup,
       logout,
       refresh,
       isAuthenticated: !!user,
     }),
-    [user, loading, initialized, login, signup, logout, refresh]
+    [user, loading, initialized, login, googleAuth, signup, logout, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -32,6 +32,16 @@ const ALL_SECTIONS = [
   'declaration'
 ];
 
+function hasMeaningfulResumeContent(resume: any): boolean {
+  return Boolean(
+    resume?.personalInfo?.fullName?.trim() ||
+    resume?.personalInfo?.summary?.trim() ||
+    (Array.isArray(resume?.experience) && resume.experience.length > 0) ||
+    (Array.isArray(resume?.education) && resume.education.length > 0) ||
+    (Array.isArray(resume?.skills) && resume.skills.length > 0)
+  );
+}
+
 /** A4 page at 96dpi — must match ResumePreview / ResumePage */
 const PAGE_W = 794;
 const PAGE_H = 1123;
@@ -130,7 +140,11 @@ export default function TemplatesPage() {
           const map: Record<string, any> = {};
           resumes.forEach((r: any) => {
             if (r.design?.templateId) {
-              map[r.design.templateId] = r;
+              // Keep first item only (API returns latest-first), so we don't overwrite
+              // with an older or emptier resume for the same template.
+              if (!map[r.design.templateId]) {
+                map[r.design.templateId] = r;
+              }
             }
           });
           setUserResumes(map);
@@ -259,13 +273,17 @@ export default function TemplatesPage() {
             <div className="flex flex-1 justify-center overflow-y-auto bg-transparent px-3 py-6 sm:px-6 sm:py-8">
               <div className="pointer-events-none flex w-full max-w-4xl origin-top scale-[0.52] select-none transition-transform sm:scale-[0.62] md:scale-[0.72] lg:scale-[0.8]">
                 <ResumePreview
-                  data={userResumes[previewTemplate.id] || {
-                    ...(TEMPLATE_SPECS.find((s) => s.id === previewTemplate.id)?.persona === 'creative'
-                      ? creativeShowcaseResume
-                      : atsOptimizedResume),
-                    jobTitle: `${previewTemplate.name} Template`,
-                    design: previewTemplate.design
-                  }}
+                  data={
+                    hasMeaningfulResumeContent(userResumes[previewTemplate.id])
+                      ? userResumes[previewTemplate.id]
+                      : {
+                          ...(TEMPLATE_SPECS.find((s) => s.id === previewTemplate.id)?.persona === 'creative'
+                            ? creativeShowcaseResume
+                            : atsOptimizedResume),
+                          jobTitle: `${previewTemplate.name} Template`,
+                          design: previewTemplate.design
+                        }
+                  }
                   selectedSections={
                     TEMPLATE_SPECS.find((s) => s.id === previewTemplate.id)?.persona === 'creative'
                       ? ALL_SECTIONS

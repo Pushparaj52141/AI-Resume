@@ -28,7 +28,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/apiClient';
+import type { ResumeData } from '@/lib/types';
 import { TEMPLATES, type Template } from '@/lib/templates';
+import { saveResumeData } from '@/lib/utils';
+import { DEFAULT_DESIGN } from '@/lib/defaults';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -59,6 +62,7 @@ interface Resume {
 export default function DashboardPage() {
     const router = useRouter();
     const { user, logout, loading: authLoading, initialized } = useAuth();
+    const importInputRef = useRef<HTMLInputElement>(null);
     const [resumes, setResumes] = useState<Resume[]>([]);
     const [loading, setLoading] = useState(true);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -103,6 +107,266 @@ export default function DashboardPage() {
         }
     };
 
+    const normalizeImportedResume = (raw: unknown): ResumeData | null => {
+        const base = (raw && typeof raw === 'object')
+            ? (
+                (raw as any).resumeData
+                ?? (raw as any).data
+                ?? raw
+            )
+            : null;
+
+        if (!base || typeof base !== 'object') return null;
+
+        const record = base as Record<string, any>;
+        const personalInfo = record.personalInfo ?? {};
+        const selectedSections = Array.isArray(record.selectedSections)
+            ? record.selectedSections
+            : ['personalInfo', 'summary', 'experience', 'education', 'skills'];
+
+        return {
+            ...record,
+            personalInfo: {
+                fullName: typeof personalInfo.fullName === 'string' ? personalInfo.fullName : '',
+                email: typeof personalInfo.email === 'string' ? personalInfo.email : '',
+                phone: typeof personalInfo.phone === 'string' ? personalInfo.phone : '',
+                location: typeof personalInfo.location === 'string' ? personalInfo.location : '',
+                linkedIn: typeof personalInfo.linkedIn === 'string' ? personalInfo.linkedIn : '',
+                website: typeof personalInfo.website === 'string' ? personalInfo.website : '',
+                summary: typeof personalInfo.summary === 'string' ? personalInfo.summary : '',
+                yearsOfExperience: typeof personalInfo.yearsOfExperience === 'number' ? personalInfo.yearsOfExperience : 0,
+            },
+            experience: Array.isArray(record.experience) ? record.experience : [],
+            education: Array.isArray(record.education) ? record.education : [],
+            skills: Array.isArray(record.skills) ? record.skills : [],
+            jobTitle: typeof record.jobTitle === 'string' ? record.jobTitle : '',
+            jobDescription: typeof record.jobDescription === 'string' ? record.jobDescription : '',
+            jobTarget: (record.jobTarget && typeof record.jobTarget === 'object')
+                ? {
+                    position: typeof record.jobTarget.position === 'string' ? record.jobTarget.position : '',
+                    company: typeof record.jobTarget.company === 'string' ? record.jobTarget.company : '',
+                    description: typeof record.jobTarget.description === 'string' ? record.jobTarget.description : '',
+                }
+                : { position: '', company: '', description: '' },
+            design: (record.design && typeof record.design === 'object') ? record.design : DEFAULT_DESIGN,
+            selectedSections,
+        } as ResumeData;
+    };
+
+    const parseResumeTextToData = (text: string): ResumeData => {
+        const lines = text
+            .split(/\r?\n/)
+            .map((line) => line.replace(/\s+/g, ' ').trim())
+            .filter(Boolean);
+
+        const isHeading = (line: string) => (
+            /^(professional summary|summary|profile|work experience|experience|education|technical skills|skills|projects|certifications?)$/i.test(line)
+            || /^[A-Z][A-Z\s&]{4,}$/.test(line)
+        );
+
+        const sectionAliases: Record<string, 'summary' | 'experience' | 'education' | 'skills' | 'other'> = {
+            'professional summary': 'summary',
+            summary: 'summary',
+            profile: 'summary',
+            'work experience': 'experience',
+            experience: 'experience',
+            education: 'education',
+            'technical skills': 'skills',
+            skills: 'skills',
+            projects: 'other',
+            certifications: 'other',
+            certification: 'other',
+        };
+
+        let currentSection: 'summary' | 'experience' | 'education' | 'skills' | 'other' = 'other';
+        const sections = {
+            summary: [] as string[],
+            experience: [] as string[],
+            education: [] as string[],
+            skills: [] as string[],
+            other: [] as string[],
+        };
+
+        for (const line of lines) {
+            const normalized = line.toLowerCase().replace(/[:\-]+$/, '').trim();
+            const mapped = sectionAliases[normalized];
+            if (mapped || isHeading(line)) {
+                currentSection = mapped ?? 'other';
+                continue;
+            }
+            sections[currentSection].push(line);
+        }
+
+        const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '';
+        const phone = text.match(/(?:\+?\d[\d\s\-()]{7,}\d)/)?.[0] ?? '';
+        const linkedIn = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/[^\s]+/i)?.[0] ?? '';
+        const website = text.match(/https?:\/\/(?!www\.linkedin\.com)[^\s]+/i)?.[0] ?? '';
+        const location = text.match(/\b(?:chennai|bangalore|bengaluru|hyderabad|mumbai|pune|delhi|noida|coimbatore|kochi)\b/i)?.[0] ?? '';
+
+        const possibleName = lines.find((line) =>
+            line.length >= 3
+            && line.length <= 60
+            && !line.includes('@')
+            && !/\d{6,}/.test(line)
+            && !isHeading(line)
+        ) ?? '';
+
+        const summarySource = sections.summary.length > 0
+            ? sections.summary.join(' ')
+            : sections.other.slice(0, 12).join(' ');
+        const summary = summarySource.slice(0, 700).trim();
+
+        const skillTokens = (sections.skills.join(',') || sections.other.join(','))
+            .split(/[,\u2022|/]/)
+            .map((token) => token.trim())
+            .filter((token) => token.length >= 2 && token.length <= 40)
+            .slice(0, 20);
+
+        const uniqueSkills = [...new Set(skillTokens)].map((name, index) => ({
+            id: `skill-${index + 1}`,
+            name,
+            level: 'intermediate' as const,
+            visible: true,
+        }));
+
+        const experienceText = sections.experience.join('\n').trim();
+        const educationText = sections.education.join('\n').trim();
+        const educationLines = sections.education;
+        const detectedJobTitle = lines.find((line) =>
+            /(developer|engineer|manager|analyst|designer|consultant|specialist|lead|intern)/i.test(line)
+            && line.length <= 70
+        ) ?? '';
+
+        return {
+            personalInfo: {
+                fullName: possibleName,
+                email,
+                phone,
+                location,
+                linkedIn,
+                website,
+                summary,
+                yearsOfExperience: 0,
+            },
+            experience: experienceText ? [{
+                id: 'exp-1',
+                company: '',
+                position: detectedJobTitle || 'Professional Experience',
+                startDate: '',
+                endDate: '',
+                current: false,
+                description: experienceText.slice(0, 1800),
+                achievements: [],
+                visible: true,
+            }] : [],
+            education: educationText ? [{
+                id: 'edu-1',
+                institution: educationLines[0] || '',
+                degree: educationLines[1] || '',
+                field: educationLines[2] || '',
+                startYear: '',
+                endYear: '',
+                gpa: '',
+                visible: true,
+            }] : [],
+            skills: uniqueSkills,
+            jobTitle: detectedJobTitle,
+            jobDescription: '',
+            jobTarget: { position: '', company: '', description: '' },
+            design: DEFAULT_DESIGN,
+            selectedSections: ['personalInfo', 'summary', 'experience', 'education', 'skills'],
+        };
+    };
+
+    const createFallbackImportedResume = (fileName: string): ResumeData => {
+        const cleanedName = fileName.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim();
+        return {
+            personalInfo: {
+                fullName: cleanedName,
+                email: '',
+                phone: '',
+                location: '',
+                linkedIn: '',
+                website: '',
+                summary: 'Imported file could not be auto-read completely. Please edit and fill your details.',
+                yearsOfExperience: 0,
+            },
+            experience: [],
+            education: [],
+            skills: [],
+            jobTitle: '',
+            jobDescription: '',
+            jobTarget: { position: '', company: '', description: '' },
+            design: DEFAULT_DESIGN,
+            selectedSections: ['personalInfo', 'summary', 'experience', 'education', 'skills'],
+        };
+    };
+
+    const extractResumeTextFromFile = async (file: File): Promise<string> => {
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.pdf') || fileName.endsWith('.docx') || fileName.endsWith('.doc') || fileName.endsWith('.txt')) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const response = await apiClient('/api/import-resume', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                return '';
+            }
+
+            const data = await response.json();
+            return typeof data.text === 'string' ? data.text.trim() : '';
+        }
+
+        throw new Error('Unsupported file type');
+    };
+
+    const handleImportResumeClick = () => {
+        importInputRef.current?.click();
+    };
+
+    const handleImportResumeFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        // Allow re-selecting the same file after an error.
+        event.target.value = '';
+        if (!file) return;
+
+        try {
+            const lowerName = file.name.toLowerCase();
+            let normalizedResume: ResumeData | null = null;
+
+            if (lowerName.endsWith('.json')) {
+                const fileText = await file.text();
+                const parsed = JSON.parse(fileText);
+                normalizedResume = normalizeImportedResume(parsed);
+            } else {
+                const extractedText = await extractResumeTextFromFile(file);
+                normalizedResume = extractedText
+                    ? parseResumeTextToData(extractedText)
+                    : createFallbackImportedResume(file.name);
+            }
+
+            if (!normalizedResume) {
+                throw new Error('Invalid resume file format');
+            }
+
+            saveResumeData(normalizedResume);
+            setShowTemplateModal(false);
+            if (normalizedResume.personalInfo.summary.includes('could not be auto-read')) {
+                toast.warning('Imported with limited parsing. Please review and edit details.');
+            } else {
+                toast.success('Resume imported successfully');
+            }
+            router.push(`/builder?imported=1&t=${Date.now()}`);
+        } catch (error) {
+            console.error('Import resume failed:', error);
+            toast.error('Could not import file. Use JSON, PDF, DOCX, DOC, or TXT.');
+        }
+    };
+
     const handleDeleteResume = async (id: string) => {
         if (!confirm('Are you sure you want to delete this resume?')) return;
 
@@ -123,11 +387,14 @@ export default function DashboardPage() {
     };
 
     // Filter and deduplicate resumes
+    const normalizedQuery = searchQuery.trim().toLowerCase();
     const filteredResumes = resumes
-        .filter(r =>
-            r.personalInfo?.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            r.jobTitle?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+        .filter((r) => {
+            if (!normalizedQuery) return true;
+            const fullName = r.personalInfo?.fullName?.toLowerCase() || '';
+            const jobTitle = r.jobTitle?.toLowerCase() || '';
+            return fullName.includes(normalizedQuery) || jobTitle.includes(normalizedQuery);
+        })
         .filter((resume, index, self) =>
             index === self.findIndex((r) => r.id === resume.id)
         );
@@ -324,6 +591,14 @@ export default function DashboardPage() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-x-8 gap-y-10">
                                     {/* Action items stacked in the first slots like the image */}
                                     <div className="flex flex-col gap-4">
+                                        <input
+                                            ref={importInputRef}
+                                            type="file"
+                                            // Keep extension-only filter for better Windows file picker compatibility.
+                                            accept=".pdf,.doc,.docx,.txt,.json"
+                                            className="hidden"
+                                            onChange={handleImportResumeFile}
+                                        />
                                         <ActionOption
                                             title="New blank"
                                             icon={<Plus size={28} className="text-slate-400 group-hover:text-slate-600" />}
@@ -332,7 +607,7 @@ export default function DashboardPage() {
                                         <ActionOption
                                             title="Import Resume"
                                             icon={<Upload size={24} className="text-slate-400 group-hover:text-slate-600" />}
-                                            onClick={() => router.push('/generate')}
+                                            onClick={handleImportResumeClick}
                                         />
                                     </div>
 
