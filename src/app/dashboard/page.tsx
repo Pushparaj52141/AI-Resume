@@ -159,31 +159,45 @@ export default function DashboardPage() {
             .map((line) => line.replace(/\s+/g, ' ').trim())
             .filter(Boolean);
 
-        const isHeading = (line: string) => (
-            /^(professional summary|summary|profile|work experience|experience|education|technical skills|skills|projects|certifications?)$/i.test(line)
-            || /^[A-Z][A-Z\s&]{4,}$/.test(line)
-        );
-
-        const sectionAliases: Record<string, 'summary' | 'experience' | 'education' | 'skills' | 'other'> = {
+        const sectionAliases: Record<string, 'summary' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'languages' | 'other'> = {
             'professional summary': 'summary',
             summary: 'summary',
             profile: 'summary',
+            objective: 'summary',
+            'career objective': 'summary',
             'work experience': 'experience',
             experience: 'experience',
+            'employment history': 'experience',
             education: 'education',
+            'academic background': 'education',
             'technical skills': 'skills',
             skills: 'skills',
-            projects: 'other',
-            certifications: 'other',
-            certification: 'other',
+            'core skills': 'skills',
+            'key skills': 'skills',
+            projects: 'projects',
+            project: 'projects',
+            certifications: 'certifications',
+            certification: 'certifications',
+            languages: 'languages',
+            language: 'languages',
         };
 
-        let currentSection: 'summary' | 'experience' | 'education' | 'skills' | 'other' = 'other';
+        const isHeading = (line: string) => {
+            const normalized = line.toLowerCase().replace(/[:\-]+$/, '').trim();
+            if (sectionAliases[normalized]) return true;
+            // Uppercase-only heading lines such as "WORK EXPERIENCE".
+            return /^[A-Z][A-Z\s&]{4,}$/.test(line) && line.length < 50;
+        };
+
+        let currentSection: keyof typeof sectionAliases | 'other' = 'other';
         const sections = {
             summary: [] as string[],
             experience: [] as string[],
             education: [] as string[],
             skills: [] as string[],
+            projects: [] as string[],
+            certifications: [] as string[],
+            languages: [] as string[],
             other: [] as string[],
         };
 
@@ -194,7 +208,7 @@ export default function DashboardPage() {
                 currentSection = mapped ?? 'other';
                 continue;
             }
-            sections[currentSection].push(line);
+            sections[currentSection as keyof typeof sections].push(line);
         }
 
         const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '';
@@ -209,37 +223,94 @@ export default function DashboardPage() {
             && !line.includes('@')
             && !/\d{6,}/.test(line)
             && !isHeading(line)
+            && !/^(resume|curriculum vitae)$/i.test(line)
         ) ?? '';
 
         const summarySource = sections.summary.length > 0
             ? sections.summary.join(' ')
-            : sections.other.slice(0, 12).join(' ');
+            : sections.other
+                .filter((line) => !/^(name|email|mobile|phone|location)\s*:/i.test(line))
+                .slice(0, 8)
+                .join(' ');
         const summary = summarySource.slice(0, 700).trim();
 
-        const skillTokens = (sections.skills.join(',') || sections.other.join(','))
+        // IMPORTANT: only parse skills from skills section; never from education/summary text.
+        const skillTokens = sections.skills.join(',')
             .split(/[,\u2022|/]/)
             .map((token) => token.trim())
-            .filter((token) => token.length >= 2 && token.length <= 40)
+            .filter((token) =>
+                token.length >= 2
+                && token.length <= 40
+                && !token.includes('@')
+                && !/\d{7,}/.test(token)
+                && !/(name|email|phone|mobile|institution|school|university|board|percentage|marks|passing)/i.test(token)
+            )
             .slice(0, 20);
 
         const uniqueSkills = [...new Set(skillTokens)].map((name, index) => ({
             id: `skill-${index + 1}`,
             name,
-            level: 'intermediate' as const,
+            level: 'advanced' as const,
             visible: true,
         }));
 
         const experienceText = sections.experience.join('\n').trim();
         const educationText = sections.education.join('\n').trim();
         const educationLines = sections.education;
-        const detectedJobTitle = lines.find((line) =>
+        const detectedJobTitle = lines.slice(0, 12).find((line) =>
             /(developer|engineer|manager|analyst|designer|consultant|specialist|lead|intern)/i.test(line)
             && line.length <= 70
+            && !line.includes('@')
         ) ?? '';
+
+        const parseProjectLikeItems = (arr: string[], prefix: string) =>
+            arr
+                .filter((line) => line.length > 2)
+                .slice(0, 8)
+                .map((line, index) => ({
+                    id: `${prefix}-${index + 1}`,
+                    title: line,
+                    startDate: '',
+                    endDate: '',
+                    description: '',
+                    visible: true,
+                }));
+
+        const certifications = sections.certifications
+            .filter((line) => line.length > 2)
+            .slice(0, 8)
+            .map((line, index) => ({
+                id: `cert-${index + 1}`,
+                name: line,
+                organization: '',
+                issueDate: '',
+                expiryDate: '',
+                certificateId: '',
+                url: '',
+                visible: true,
+            }));
+
+        const languages = sections.languages
+            .join(',')
+            .split(/[,\u2022|/]/)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 1 && line.length < 30)
+            .slice(0, 10)
+            .map((line, index) => ({
+                id: `lang-${index + 1}`,
+                name: line,
+                level: 'intermediate' as const,
+                visible: true,
+            }));
+
+        const selectedSections = ['personalInfo', 'summary', 'experience', 'education', 'skills'];
+        if (sections.projects.length) selectedSections.push('projects');
+        if (certifications.length) selectedSections.push('certificates');
+        if (languages.length) selectedSections.push('languages');
 
         return {
             personalInfo: {
-                fullName: possibleName,
+                fullName: possibleName.replace(/^name\s*:\s*/i, ''),
                 email,
                 phone,
                 location,
@@ -270,11 +341,14 @@ export default function DashboardPage() {
                 visible: true,
             }] : [],
             skills: uniqueSkills,
+            projects: parseProjectLikeItems(sections.projects, 'proj'),
+            certificates: certifications,
+            languages,
             jobTitle: detectedJobTitle,
             jobDescription: '',
             jobTarget: { position: '', company: '', description: '' },
             design: DEFAULT_DESIGN,
-            selectedSections: ['personalInfo', 'summary', 'experience', 'education', 'skills'],
+            selectedSections,
         };
     };
 
